@@ -29,6 +29,8 @@ struct Asset {
     thumb: String,
     /// 主色调（hex 数组，第一个为最主要色）
     colors: Vec<String>,
+    /// 原文件是否已失效（被移动/删除）
+    missing: bool,
 }
 
 const IMAGE_EXTS: &[&str] = &[
@@ -124,9 +126,11 @@ fn fetch_assets(conn: &Connection) -> Result<Vec<Asset>, String> {
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
             let colors_json: String = row.get(13).unwrap_or_else(|_| "[]".to_string());
             let colors: Vec<String> = serde_json::from_str(&colors_json).unwrap_or_default();
+            let path: String = row.get(1)?;
+            let missing = !std::path::Path::new(&path).exists();
             Ok(Asset {
                 id: row.get(0)?,
-                path: row.get(1)?,
+                path,
                 name: row.get(2)?,
                 format: row.get(3).unwrap_or_default(),
                 width: row.get(4).unwrap_or(0),
@@ -139,6 +143,7 @@ fn fetch_assets(conn: &Connection) -> Result<Vec<Asset>, String> {
                 added_at: row.get(11).unwrap_or(0),
                 thumb: row.get(12).unwrap_or_default(),
                 colors,
+                missing,
             })
         })
         .map_err(|e| e.to_string())?;

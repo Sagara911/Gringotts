@@ -18,13 +18,17 @@ interface Asset {
   addedAt: number;
   thumb: string;
   colors: string[];
+  missing: boolean;
 }
 
 type Filter =
   | { kind: "all" }
   | { kind: "tag"; value: string }
   | { kind: "folder"; value: string }
-  | { kind: "color"; value: string };
+  | { kind: "color"; value: string }
+  | { kind: "missing" };
+
+type SortKey = "time" | "name" | "size";
 
 function humanSize(bytes: number): string {
   if (!bytes) return "—";
@@ -228,6 +232,84 @@ function Inspector({
   );
 }
 
+function TagTree({
+  tags,
+  activeValue,
+  onPick,
+}: {
+  tags: [string, number][];
+  activeValue: string | null;
+  onPick: (v: string) => void;
+}) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const groups = useMemo(() => {
+    const m = new Map<
+      string,
+      { selfCount: number; children: { full: string; leaf: string; count: number }[] }
+    >();
+    for (const [name, count] of tags) {
+      const top = name.includes("/") ? name.slice(0, name.indexOf("/")) : name;
+      if (!m.has(top)) m.set(top, { selfCount: 0, children: [] });
+      const g = m.get(top)!;
+      if (name.includes("/")) g.children.push({ full: name, leaf: name.slice(top.length + 1), count });
+      else g.selfCount += count;
+    }
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [tags]);
+
+  if (tags.length === 0)
+    return <div className="nav-item child dim">（暂无，选中图片后可打标签）</div>;
+
+  return (
+    <>
+      {groups.map(([top, g]) => {
+        const hasChildren = g.children.length > 0;
+        const isOpen = open.has(top);
+        const total = g.selfCount + g.children.reduce((s, c) => s + c.count, 0);
+        return (
+          <div key={top}>
+            <div className={"nav-item child" + (activeValue === top ? " active" : "")}>
+              {hasChildren ? (
+                <span
+                  className="chev"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen((p) => {
+                      const n = new Set(p);
+                      n.has(top) ? n.delete(top) : n.add(top);
+                      return n;
+                    });
+                  }}
+                >
+                  {isOpen ? "▾" : "▸"}
+                </span>
+              ) : (
+                <span className="chev placeholder">🏷</span>
+              )}
+              <span className="ellip" onClick={() => onPick(top)}>
+                {top}
+              </span>
+              <span className="count">{total}</span>
+            </div>
+            {hasChildren &&
+              isOpen &&
+              g.children.map((c) => (
+                <div
+                  key={c.full}
+                  className={"nav-item grandchild" + (activeValue === c.full ? " active" : "")}
+                  onClick={() => onPick(c.full)}
+                >
+                  <span className="ellip">{c.leaf}</span>
+                  <span className="count">{c.count}</span>
+                </div>
+              ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -239,6 +321,15 @@ function App() {
   const [batchTag, setBatchTag] = useState("");
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("time");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSel(new Set());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -401,6 +492,8 @@ function App() {
         return a.folder === filter.value;
       case "color":
         return primaryBucket(a.colors) === filter.value;
+      case "missing":
+        return a.missing;
     }
   };
   const matchesQuery = (a: Asset) =>
@@ -409,6 +502,12 @@ function App() {
     a.tags.some((t) => t.includes(query));
 
   const filtered = assets.filter((a) => matchesFilter(a) && matchesQuery(a));
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortKey === "name") return a.name.localeCompare(b.name);
+    if (sortKey === "size") return b.sizeBytes - a.sizeBytes;
+    return b.addedAt - a.addedAt || b.id - a.id;
+  });
+  const missingCount = assets.filter((a) => a.missing).length;
   const selected = assets.find((a) => a.id === selectedId) ?? null;
 
   const isActive = (f: Filter) =>
@@ -418,6 +517,8 @@ function App() {
   const filterLabel =
     filter.kind === "all"
       ? "全部素材"
+      : filter.kind === "missing"
+      ? "失效链接"
       : filter.kind === "tag"
       ? `标签：${filter.value}`
       : filter.kind === "folder"
@@ -456,6 +557,15 @@ function App() {
             📁 <span>全部素材</span>
             <span className="count">{assets.length}</span>
           </div>
+          {missingCount > 0 && (
+            <div
+              className={"nav-item warn" + (isActive({ kind: "missing" }) ? " active" : "")}
+              onClick={() => setFilter({ kind: "missing" })}
+            >
+              ⚠ <span>失效链接</span>
+              <span className="count">{missingCount}</span>
+            </div>
+          )}
         </div>
 
         {folders.length > 0 && (
@@ -497,31 +607,31 @@ function App() {
 
         <div className="nav-group">
           <h4>标签</h4>
-          {tags.length === 0 ? (
-            <div className="nav-item child dim">（暂无，选中图片后可打标签）</div>
-          ) : (
-            tags.map(([name, count]) => (
-              <div
-                key={name}
-                className={
-                  "nav-item child" + (isActive({ kind: "tag", value: name }) ? " active" : "")
-                }
-                onClick={() => setFilter({ kind: "tag", value: name })}
-              >
-                🏷 <span className="ellip">{name}</span>
-                <span className="count">{count}</span>
-              </div>
-            ))
-          )}
+          <TagTree
+            tags={tags}
+            activeValue={filter.kind === "tag" ? filter.value : null}
+            onPick={(v) => setFilter({ kind: "tag", value: v })}
+          />
         </div>
       </aside>
 
       <main className="grid-wrap">
         <div className="grid-head">
           <span>
-            {filterLabel} · {filtered.length} 项
+            {filterLabel} · {sorted.length} 项
           </span>
-          <span>{status}</span>
+          <span className="grid-head-right">
+            <span className="status-text">{status}</span>
+            <select
+              className="sort-select"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+            >
+              <option value="time">最近导入</option>
+              <option value="name">名称</option>
+              <option value="size">大小</option>
+            </select>
+          </span>
         </div>
 
         {sel.size > 1 && (
@@ -554,7 +664,7 @@ function App() {
           </div>
         ) : (
           <div className="grid">
-            {filtered.map((a) => (
+            {sorted.map((a) => (
               <div
                 key={a.id}
                 className={
@@ -565,6 +675,7 @@ function App() {
                 onClick={(e) => onCardClick(e, a.id)}
               >
                 <div className="thumb">
+                  {a.missing && <span className="badge-missing">⚠ 失效</span>}
                   <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
                 </div>
                 <div className="meta">
@@ -579,7 +690,7 @@ function App() {
             ))}
           </div>
         )}
-        {assets.length > 0 && filtered.length === 0 && (
+        {assets.length > 0 && sorted.length === 0 && (
           <div className="empty">没有匹配的素材</div>
         )}
       </main>
