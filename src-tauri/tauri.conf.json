@@ -12,13 +12,19 @@
   "app": {
     "windows": [
       {
-        "title": "gringotts",
-        "width": 800,
-        "height": 600
+        "title": "Gringotts 古灵阁",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
     }
   },
   "bundle": {
