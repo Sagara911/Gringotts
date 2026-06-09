@@ -61,6 +61,8 @@ fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
             added_at INTEGER,
             thumb TEXT,
             colors TEXT,
+            caption TEXT,
+            embedding TEXT,
             embed_model_version TEXT
         );",
     )
@@ -68,6 +70,8 @@ fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
     // 旧库迁移：补列（已存在则报错，忽略即可）
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN thumb TEXT", []);
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN colors TEXT", []);
+    let _ = conn.execute("ALTER TABLE assets ADD COLUMN caption TEXT", []);
+    let _ = conn.execute("ALTER TABLE assets ADD COLUMN embedding TEXT", []);
     Ok(conn)
 }
 
@@ -439,6 +443,7 @@ async fn ai_run(app: tauri::AppHandle, id: i64, mode: String) -> Result<String, 
     let prompt = match mode.as_str() {
         "tags" => "请用中文为这张图片生成 6-10 个简短标签，覆盖：题材/主体、风格、场景、配色、明暗氛围。只输出标签本身，用英文逗号 , 分隔，不要编号、不要解释。",
         "prompt" => "Generate a single Stable Diffusion / Midjourney style prompt (comma-separated English keywords) describing this reference image: subject, style, lighting, composition, camera, quality. Output ONLY the prompt text.",
+        "caption" => "用中文一句话（40字以内）概括这张图：主体、风格、场景、配色、氛围。只输出这一句话，不要解释、不要换行。",
         _ => "用中文分析这张画面：构图、打光、配色、风格特点。简明扼要，分点列出。",
     };
 
@@ -527,6 +532,153 @@ async fn ai_tag_bulk(app: tauri::AppHandle, ids: Vec<i64>) -> Result<usize, Stri
     Ok(ok)
 }
 
+// ===== 语义搜索（文本嵌入：caption→向量；查询→向量；余弦相似）=====
+
+fn embed_config() -> (String, String, String) {
+    let (base, _m, key) = ai_config();
+    let model = std::env::var("GRINGOTTS_EMBED_MODEL").unwrap_or_else(|_| "bge-m3".to_string());
+    (base, model, key)
+}
+
+async fn embed_text(text: &str) -> Result<Vec<f32>, String> {
+    let (base, model, key) = embed_config();
+    let url = format!("{}/embeddings", base.trim_end_matches('/'));
+    let body = serde_json::json!({ "model": model, "input": text });
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", key))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("嵌入请求失败：{e}（确认 Ollama 在运行、已拉取 bge-m3）"))?;
+    if !resp.status().is_success() {
+        let st = resp.status();
+        let t = resp.text().await.unwrap_or_default();
+        return Err(format!("嵌入服务返回 {st}: {t}"));
+    }
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let arr = v["data"][0]["embedding"]
+        .as_array()
+        .ok_or("嵌入响应缺少 embedding")?;
+    Ok(arr.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect())
+}
+
+fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return -1.0;
+    }
+    let (mut dot, mut na, mut nb) = (0.0f32, 0.0f32, 0.0f32);
+    for i in 0..a.len() {
+        dot += a[i] * b[i];
+        na += a[i] * a[i];
+        nb += b[i] * b[i];
+    }
+    if na == 0.0 || nb == 0.0 {
+        return -1.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
+
+fn load_embeddings(app: &tauri::AppHandle) -> Result<Vec<(i64, Vec<f32>)>, String> {
+    let conn = open_db(app)?;
+    let mut stmt = conn
+        .prepare("SELECT id, embedding FROM assets WHERE embedding IS NOT NULL AND embedding!=''")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+        .map_err(|e| e.to_string())?;
+    Ok(rows
+        .filter_map(|r| r.ok())
+        .filter_map(|(id, ej)| serde_json::from_str::<Vec<f32>>(&ej).ok().map(|v| (id, v)))
+        .collect())
+}
+
+/// 为缺向量（或换了嵌入模型）的素材建立语义索引：Gemma 生成描述 → bge-m3 转向量。返回处理数量。
+#[tauri::command]
+async fn build_embeddings(app: tauri::AppHandle) -> Result<usize, String> {
+    let (_b, model, _k) = embed_config();
+    let todo: Vec<i64> = {
+        let conn = open_db(&app)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id FROM assets
+                 WHERE embedding IS NULL OR embedding='' OR embed_model_version IS NULL OR embed_model_version!=?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params![model], |r| r.get::<_, i64>(0))
+            .map_err(|e| e.to_string())?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let mut done = 0usize;
+    for id in todo {
+        let caption = match ai_run(app.clone(), id, "caption".to_string()).await {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        // 把文件名 + 已有标签也并入文本，让检索更全
+        let extra: String = {
+            let conn = open_db(&app)?;
+            conn.query_row(
+                "SELECT name || ' ' || COALESCE(tags,'') FROM assets WHERE id=?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap_or_default()
+        };
+        let text = format!("{} {}", caption, extra);
+        let emb = match embed_text(&text).await {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let ej = serde_json::to_string(&emb).unwrap_or_else(|_| "[]".to_string());
+        let conn = open_db(&app)?;
+        let _ = conn.execute(
+            "UPDATE assets SET caption=?1, embedding=?2, embed_model_version=?3 WHERE id=?4",
+            rusqlite::params![caption, ej, model, id],
+        );
+        done += 1;
+    }
+    Ok(done)
+}
+
+/// 文字搜图：把 query 转向量，返回相似度最高的素材 id（已建索引者）
+#[tauri::command]
+async fn semantic_search(
+    app: tauri::AppHandle,
+    query: String,
+    top: usize,
+) -> Result<Vec<i64>, String> {
+    let qv = embed_text(&query).await?;
+    let rows = load_embeddings(&app)?;
+    let mut scored: Vec<(i64, f32)> = rows
+        .into_iter()
+        .map(|(id, v)| (id, cosine(&qv, &v)))
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(scored.into_iter().take(top.max(1)).map(|(id, _)| id).collect())
+}
+
+/// 找相似：以某素材的向量找最接近的其它素材
+#[tauri::command]
+fn similar_to(app: tauri::AppHandle, id: i64, top: usize) -> Result<Vec<i64>, String> {
+    let rows = load_embeddings(&app)?;
+    let target = rows
+        .iter()
+        .find(|(rid, _)| *rid == id)
+        .map(|(_, v)| v.clone())
+        .ok_or("该图还没建立语义索引，请先点「建立语义索引」")?;
+    let mut scored: Vec<(i64, f32)> = rows
+        .into_iter()
+        .filter(|(rid, _)| *rid != id)
+        .map(|(rid, v)| (rid, cosine(&target, &v)))
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(scored.into_iter().take(top.max(1)).map(|(id, _)| id).collect())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -542,7 +694,10 @@ pub fn run() {
             export_metadata,
             ai_run,
             ai_tag_bulk,
-            remove_asset
+            remove_asset,
+            build_embeddings,
+            semantic_search,
+            similar_to
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

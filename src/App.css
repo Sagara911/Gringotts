@@ -305,3 +305,16 @@ body {
 .ctx-item:hover { background: var(--hover); }
 .ctx-item.danger { color: #e06a5a; }
 .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* 语义搜索切换 + 退出链接 */
+.mode-toggle {
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer;
+  white-space: nowrap; margin-left: 4px;
+}
+.mode-toggle:hover { border-color: var(--gold-dim); }
+.mode-toggle.on { background: var(--gold); color: #1a1408; border-color: var(--gold); font-weight: 600; }
+.btn.link {
+  background: transparent; border: none; color: var(--gold);
+  padding: 0 6px; cursor: pointer; font-size: 12px;
+}

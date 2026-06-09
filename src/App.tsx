@@ -124,6 +124,7 @@ function Inspector({
   onAi,
   aiBusy,
   aiResult,
+  onSimilar,
 }: {
   asset: Asset | null;
   onAddTag: (id: number, tag: string) => void;
@@ -131,6 +132,7 @@ function Inspector({
   onAi: (id: number, mode: string) => void;
   aiBusy: string | null;
   aiResult: string;
+  onSimilar: (id: number) => void;
 }) {
   const [tagInput, setTagInput] = useState("");
   if (!asset) {
@@ -212,8 +214,8 @@ function Inspector({
             {aiBusy === "describe" ? "分析中…" : "分析画面"}
             <span className="hint">打光 / 构图 / 配色拉片</span>
           </button>
-          <button className="ai-btn" disabled>
-            找相似<span className="hint">向量检索（阶段二 · CLIP）</span>
+          <button className="ai-btn" onClick={() => onSimilar(asset.id)}>
+            找相似<span className="hint">语义向量检索视觉/题材近似</span>
           </button>
           <button className="ai-btn" disabled>
             📌 加入参考板<span className="hint">无限画布（后续）</span>
@@ -326,6 +328,8 @@ function App() {
   const [aiResult, setAiResult] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [ctx, setCtx] = useState<{ x: number; y: number; asset: Asset } | null>(null);
+  const [searchMode, setSearchMode] = useState<"name" | "semantic">("name");
+  const [semanticIds, setSemanticIds] = useState<number[] | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -419,6 +423,52 @@ function App() {
     await invoke("set_tags", { id, tags: a.tags.filter((t) => t !== tag) });
     await reload();
   }
+  async function doSemantic(q: string) {
+    if (!q.trim()) {
+      setSemanticIds(null);
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus("语义搜索中…");
+      const ids = await invoke<number[]>("semantic_search", { query: q, top: 80 });
+      setSemanticIds(ids);
+      setStatus(`语义搜索：${ids.length} 个结果`);
+    } catch (e) {
+      setStatus(`语义搜索失败：${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSimilar(id: number) {
+    try {
+      setBusy(true);
+      setStatus("查找相似…");
+      const ids = await invoke<number[]>("similar_to", { id, top: 80 });
+      setSemanticIds(ids);
+      setStatus(`找相似：${ids.length} 个结果`);
+    } catch (e) {
+      setStatus(`找相似失败：${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function buildIndex() {
+    try {
+      setBusy(true);
+      setStatus("建立语义索引中…（首次较慢，每张需 Gemma 生成描述）");
+      const n = await invoke<number>("build_embeddings");
+      await reload();
+      setStatus(`语义索引完成：本次处理 ${n} 张`);
+    } catch (e) {
+      setStatus(`建索引失败：${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function aiRun(id: number, mode: string) {
     try {
       setAiBusy(mode);
@@ -521,6 +571,9 @@ function App() {
     return b.addedAt - a.addedAt || b.id - a.id;
   });
   const missingCount = assets.filter((a) => a.missing).length;
+  const displayList: Asset[] = semanticIds
+    ? (semanticIds.map((id) => assets.find((a) => a.id === id)).filter(Boolean) as Asset[])
+    : sorted;
   const selected = assets.find((a) => a.id === selectedId) ?? null;
 
   const isActive = (f: Filter) =>
@@ -547,11 +600,33 @@ function App() {
         <div className="search">
           <span className="icon">🔍</span>
           <input
-            placeholder='搜索文件名 / 标签（例 "夜景" "厚涂"）'
+            placeholder={
+              searchMode === "semantic"
+                ? '用大白话搜：例 "夜景里的红发女孩"（回车）'
+                : '搜索文件名 / 标签（例 "夜景" "厚涂"）'
+            }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && searchMode === "semantic") doSemantic(query);
+            }}
           />
+          <button
+            className={"mode-toggle" + (searchMode === "semantic" ? " on" : "")}
+            title="切换语义搜索（AI 理解大白话）"
+            onClick={() => {
+              const next = searchMode === "semantic" ? "name" : "semantic";
+              setSearchMode(next);
+              if (next === "name") setSemanticIds(null);
+              else if (query.trim()) doSemantic(query);
+            }}
+          >
+            ✨ 语义
+          </button>
         </div>
+        <button className="btn" onClick={buildIndex} disabled={busy} title="为素材建立语义索引（首次较慢）">
+          建索引
+        </button>
         <button className="btn" onClick={handleExport} title="导出元数据（不锁定）">
           导出
         </button>
@@ -631,7 +706,14 @@ function App() {
       <main className="grid-wrap">
         <div className="grid-head">
           <span>
-            {filterLabel} · {sorted.length} 项
+            {semanticIds
+              ? `${searchMode === "semantic" ? "✨ 语义结果" : "🔎 相似结果"} · ${displayList.length} 项`
+              : `${filterLabel} · ${displayList.length} 项`}
+            {semanticIds && (
+              <button className="btn link" onClick={() => setSemanticIds(null)}>
+                退出
+              </button>
+            )}
           </span>
           <span className="grid-head-right">
             <span className="status-text">{status}</span>
@@ -677,7 +759,7 @@ function App() {
           </div>
         ) : (
           <div className="grid">
-            {sorted.map((a) => (
+            {displayList.map((a) => (
               <div
                 key={a.id}
                 className={
@@ -709,8 +791,10 @@ function App() {
             ))}
           </div>
         )}
-        {assets.length > 0 && sorted.length === 0 && (
-          <div className="empty">没有匹配的素材</div>
+        {assets.length > 0 && displayList.length === 0 && (
+          <div className="empty">
+            {semanticIds ? "没有语义结果（先点「建索引」？）" : "没有匹配的素材"}
+          </div>
         )}
       </main>
 
@@ -721,6 +805,7 @@ function App() {
         onAi={aiRun}
         aiBusy={aiBusy}
         aiResult={aiResult}
+        onSimilar={onSimilar}
       />
 
       {ctx && (
