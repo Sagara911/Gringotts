@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use base64::Engine;
 use rusqlite::Connection;
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use walkdir::WalkDir;
 
 /// 单条素材的元数据（序列化成 camelCase 给前端）
@@ -790,6 +790,89 @@ fn clip_similar(app: tauri::AppHandle, id: i64, top: usize) -> Result<Vec<i64>, 
     Ok(scored.into_iter().take(top.max(1)).map(|(id, _)| id).collect())
 }
 
+// ===== 本地 AI 一键安装（检测 Ollama / 拉取模型带进度）=====
+
+fn ollama_host(app: &tauri::AppHandle) -> String {
+    let (base, _m, _k) = ai_config(app);
+    base.trim_end_matches("/v1").trim_end_matches('/').to_string()
+}
+
+/// 检测本地 Ollama 是否在运行，以及当前模型是否已下载
+#[tauri::command]
+async fn ai_status(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let (_b, model, _k) = ai_config(&app);
+    let host = ollama_host(&app);
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!("{}/api/tags", host))
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await;
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            let v: serde_json::Value = r.json().await.unwrap_or(serde_json::json!({"models":[]}));
+            let models: Vec<String> = v["models"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let present = models.iter().any(|m| m == &model);
+            Ok(serde_json::json!({
+                "ollama": true, "model": model, "modelPresent": present, "models": models
+            }))
+        }
+        _ => Ok(serde_json::json!({
+            "ollama": false, "model": model, "modelPresent": false, "models": []
+        })),
+    }
+}
+
+/// 一键拉取模型；通过 "pull-progress" 事件把进度推给前端
+#[tauri::command]
+async fn pull_model(app: tauri::AppHandle, model: String) -> Result<(), String> {
+    let host = ollama_host(&app);
+    let client = reqwest::Client::new();
+    let mut resp = client
+        .post(format!("{}/api/pull", host))
+        .json(&serde_json::json!({ "model": model, "stream": true }))
+        .send()
+        .await
+        .map_err(|e| format!("连接 Ollama 失败：{e}（确认已安装并运行）"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Ollama 返回 {}", resp.status()));
+    }
+    let mut buf = String::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+        buf.push_str(&String::from_utf8_lossy(&chunk));
+        while let Some(nl) = buf.find('\n') {
+            let line: String = buf.drain(..=nl).collect();
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                let status = v["status"].as_str().unwrap_or("").to_string();
+                let completed = v["completed"].as_f64().unwrap_or(0.0);
+                let total = v["total"].as_f64().unwrap_or(0.0);
+                let percent = if total > 0.0 {
+                    (completed / total * 100.0) as i64
+                } else {
+                    -1
+                };
+                let _ = app.emit(
+                    "pull-progress",
+                    serde_json::json!({ "status": status, "percent": percent }),
+                );
+            }
+        }
+    }
+    let _ = app.emit("pull-progress", serde_json::json!({ "status": "success", "percent": 100 }));
+    Ok(())
+}
+
 // ===== 设置（AI Provider 可配置）=====
 
 #[derive(serde::Serialize)]
@@ -865,7 +948,9 @@ pub fn run() {
             clip_targets,
             set_clip_embedding,
             clip_search,
-            clip_similar
+            clip_similar,
+            ai_status,
+            pull_model
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl, openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { listen } from "@tauri-apps/api/event";
 import { textVector, imageVector } from "./clip";
 import "./App.css";
 
@@ -347,9 +348,48 @@ const AI_PRESETS: Record<string, AiCfg> = {
 function SettingsModal({ onClose }: { onClose: () => void }) {
   const [f, setF] = useState<AiCfg>({ aiBase: "", aiModel: "", aiKey: "", embedModel: "" });
   const [saved, setSaved] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [st, setSt] = useState<any>(null);
+  const [pulling, setPulling] = useState(false);
+  const [pullPct, setPullPct] = useState(0);
+  const [pullMsg, setPullMsg] = useState("");
+  const [pullName, setPullName] = useState("gemma4:12b");
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      setSt(await invoke("ai_status"));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     invoke<AiCfg>("get_settings").then(setF).catch(() => {});
-  }, []);
+    refreshStatus();
+  }, [refreshStatus]);
+
+  async function doPull() {
+    setPulling(true);
+    setPullPct(0);
+    setPullMsg("开始下载…");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const un = await listen<any>("pull-progress", (e) => {
+      const p = e.payload;
+      if (typeof p.percent === "number" && p.percent >= 0) setPullPct(p.percent);
+      if (p.status) setPullMsg(p.status);
+    });
+    try {
+      await invoke("pull_model", { model: pullName });
+      setPullMsg("下载完成 ✓");
+      await refreshStatus();
+    } catch (e) {
+      setPullMsg(`失败：${e}`);
+    } finally {
+      un();
+      setPulling(false);
+    }
+  }
+
   async function save() {
     try {
       await invoke("set_settings", { settings: f });
@@ -366,6 +406,50 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         <p className="dim">
           选本地 Ollama（装了 Gemma 就用），或填你自己的 OpenAI 兼容 API（DeepSeek / GPT 等）。留空项回退默认。
         </p>
+
+        <div className="ai-status">
+          {!st ? (
+            <span className="dim">检测本地 AI…</span>
+          ) : !st.ollama ? (
+            <div className="status-row">
+              <span className="warn-text">⚠ 未检测到 Ollama（本地 Gemma 需要它）</span>
+              <button className="btn" onClick={() => openUrl("https://ollama.com/download")}>
+                获取 Ollama
+              </button>
+              <button className="btn link" onClick={refreshStatus}>
+                重新检测
+              </button>
+            </div>
+          ) : st.modelPresent ? (
+            <span className="ok-text">✓ 本地 AI 就绪（{st.model}）</span>
+          ) : (
+            <div className="status-row col">
+              <span className="dim">已检测到 Ollama，但未下载模型</span>
+              <div className="status-row">
+                <select
+                  className="cfg-input"
+                  style={{ flex: 1 }}
+                  value={pullName}
+                  onChange={(e) => setPullName(e.target.value)}
+                  disabled={pulling}
+                >
+                  <option value="gemma4:12b">gemma4:12b（推荐，~7.6GB）</option>
+                  <option value="gemma4:e4b">gemma4:e4b（轻量，~9.6GB）</option>
+                </select>
+                <button className="btn primary" onClick={doPull} disabled={pulling}>
+                  {pulling ? `下载中 ${pullPct}%` : "一键下载 Gemma 4"}
+                </button>
+              </div>
+              {pulling && (
+                <div className="pull-bar">
+                  <div className="pull-fill" style={{ width: `${pullPct}%` }} />
+                </div>
+              )}
+              {pulling && <div className="dim">{pullMsg}</div>}
+            </div>
+          )}
+        </div>
+
         <label>快速预设</label>
         <select
           className="cfg-input"

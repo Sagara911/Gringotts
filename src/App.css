@@ -340,3 +340,15 @@ body {
   display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 18px;
 }
 .modal-actions .dim { margin-right: auto; }
+
+/* 本地 AI 状态 / 一键下载 */
+.ai-status {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; margin: 8px 0 4px;
+}
+.status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.status-row.col { flex-direction: column; align-items: stretch; }
+.ok-text { color: #6fcf6f; font-size: 13px; }
+.warn-text { color: #e0a85a; font-size: 13px; }
+.pull-bar { height: 6px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.pull-fill { height: 100%; background: var(--gold); transition: width 0.2s; }
