@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl, openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { textVector, imageVector } from "./clip";
 import "./App.css";
 
 const DOBBY_URL = "https://dobby-aih.pages.dev/";
@@ -540,8 +541,9 @@ function App() {
     }
     try {
       setBusy(true);
-      setStatus("语义搜索中…");
-      const ids = await invoke<number[]>("semantic_search", { query: q, top: 80 });
+      setStatus("CLIP 语义搜索中…（首次加载模型稍候）");
+      const vector = await textVector(q);
+      const ids = await invoke<number[]>("clip_search", { vector, top: 80 });
       setSemanticIds(ids);
       setStatus(`语义搜索：${ids.length} 个结果`);
     } catch (e) {
@@ -555,11 +557,11 @@ function App() {
     try {
       setBusy(true);
       setStatus("查找相似…");
-      const ids = await invoke<number[]>("similar_to", { id, top: 80 });
+      const ids = await invoke<number[]>("clip_similar", { id, top: 80 });
       setSemanticIds(ids);
       setStatus(`找相似：${ids.length} 个结果`);
     } catch (e) {
-      setStatus(`找相似失败：${e}`);
+      setStatus(`找相似失败：${e}（先点「建索引」？）`);
     } finally {
       setBusy(false);
     }
@@ -568,10 +570,25 @@ function App() {
   async function buildIndex() {
     try {
       setBusy(true);
-      setStatus("建立语义索引中…（首次较慢，每张需 Gemma 生成描述）");
-      const n = await invoke<number>("build_embeddings");
-      await reload();
-      setStatus(`语义索引完成：本次处理 ${n} 张`);
+      setStatus("加载 CLIP 模型…（首次需下载，约一两分钟）");
+      const targets = await invoke<{ id: number; img: string }[]>("clip_targets");
+      if (targets.length === 0) {
+        setStatus("CLIP 索引已是最新");
+        return;
+      }
+      let done = 0;
+      for (const t of targets) {
+        try {
+          const vector = await imageVector(convertFileSrc(t.img));
+          await invoke("set_clip_embedding", { id: t.id, vector });
+          done++;
+          if (done % 5 === 0 || done === targets.length)
+            setStatus(`建立 CLIP 索引… ${done}/${targets.length}`);
+        } catch {
+          /* 跳过单张失败 */
+        }
+      }
+      setStatus(`CLIP 索引完成：${done}/${targets.length}`);
     } catch (e) {
       setStatus(`建索引失败：${e}`);
     } finally {

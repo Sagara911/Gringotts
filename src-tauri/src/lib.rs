@@ -76,6 +76,7 @@ fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN colors TEXT", []);
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN caption TEXT", []);
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN embedding TEXT", []);
+    let _ = conn.execute("ALTER TABLE assets ADD COLUMN clip_embedding TEXT", []);
     Ok(conn)
 }
 
@@ -702,6 +703,93 @@ fn similar_to(app: tauri::AppHandle, id: i64, top: usize) -> Result<Vec<i64>, St
     Ok(scored.into_iter().take(top.max(1)).map(|(id, _)| id).collect())
 }
 
+// ===== 内置 CLIP（前端 transformers.js 计算向量，后端只负责存取与检索）=====
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClipTarget {
+    id: i64,
+    img: String,
+}
+
+fn load_clip(app: &tauri::AppHandle) -> Result<Vec<(i64, Vec<f32>)>, String> {
+    let conn = open_db(app)?;
+    let mut stmt = conn
+        .prepare("SELECT id, clip_embedding FROM assets WHERE clip_embedding IS NOT NULL AND clip_embedding!=''")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+        .map_err(|e| e.to_string())?;
+    Ok(rows
+        .filter_map(|r| r.ok())
+        .filter_map(|(id, ej)| serde_json::from_str::<Vec<f32>>(&ej).ok().map(|v| (id, v)))
+        .collect())
+}
+
+/// 返回还没有 CLIP 向量的素材（id + 用于计算的图片路径，优先缩略图）
+#[tauri::command]
+fn clip_targets(app: tauri::AppHandle) -> Result<Vec<ClipTarget>, String> {
+    let conn = open_db(&app)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, COALESCE(NULLIF(thumb,''), path) FROM assets
+             WHERE clip_embedding IS NULL OR clip_embedding=''",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(ClipTarget {
+                id: r.get(0)?,
+                img: r.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+/// 存一张图的 CLIP 向量
+#[tauri::command]
+fn set_clip_embedding(app: tauri::AppHandle, id: i64, vector: Vec<f32>) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    let ej = serde_json::to_string(&vector).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE assets SET clip_embedding=?1 WHERE id=?2",
+        rusqlite::params![ej, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 文字/以图搜图：传入查询向量（前端用 CLIP 算好），返回相似度最高的素材 id
+#[tauri::command]
+fn clip_search(app: tauri::AppHandle, vector: Vec<f32>, top: usize) -> Result<Vec<i64>, String> {
+    let rows = load_clip(&app)?;
+    let mut scored: Vec<(i64, f32)> = rows
+        .into_iter()
+        .map(|(id, v)| (id, cosine(&vector, &v)))
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(scored.into_iter().take(top.max(1)).map(|(id, _)| id).collect())
+}
+
+/// 以某素材的 CLIP 向量找最相似的其它素材
+#[tauri::command]
+fn clip_similar(app: tauri::AppHandle, id: i64, top: usize) -> Result<Vec<i64>, String> {
+    let rows = load_clip(&app)?;
+    let target = rows
+        .iter()
+        .find(|(rid, _)| *rid == id)
+        .map(|(_, v)| v.clone())
+        .ok_or("该图还没建立 CLIP 索引")?;
+    let mut scored: Vec<(i64, f32)> = rows
+        .into_iter()
+        .filter(|(rid, _)| *rid != id)
+        .map(|(rid, v)| (rid, cosine(&target, &v)))
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(scored.into_iter().take(top.max(1)).map(|(id, _)| id).collect())
+}
+
 // ===== 设置（AI Provider 可配置）=====
 
 #[derive(serde::Serialize)]
@@ -773,7 +861,11 @@ pub fn run() {
             semantic_search,
             similar_to,
             get_settings,
-            set_settings
+            set_settings,
+            clip_targets,
+            set_clip_embedding,
+            clip_search,
+            clip_similar
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
