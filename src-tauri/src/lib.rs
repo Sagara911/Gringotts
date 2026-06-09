@@ -392,7 +392,7 @@ fn image_data_uri(path: &str) -> Result<String, String> {
 fn ai_config() -> (String, String, String) {
     let base = std::env::var("GRINGOTTS_AI_BASE")
         .unwrap_or_else(|_| "http://localhost:11434/v1".to_string());
-    let model = std::env::var("GRINGOTTS_AI_MODEL").unwrap_or_else(|_| "gemma4:e4b".to_string());
+    let model = std::env::var("GRINGOTTS_AI_MODEL").unwrap_or_else(|_| "gemma4:12b".to_string());
     let key = std::env::var("GRINGOTTS_AI_KEY").unwrap_or_else(|_| "ollama".to_string());
     (base, model, key)
 }
@@ -492,6 +492,18 @@ async fn ai_run(app: tauri::AppHandle, id: i64, mode: String) -> Result<String, 
     Ok(content)
 }
 
+/// 批量给多张素材跑 Gemma 自动打标。返回成功数量。
+#[tauri::command]
+async fn ai_tag_bulk(app: tauri::AppHandle, ids: Vec<i64>) -> Result<usize, String> {
+    let mut ok = 0usize;
+    for id in ids {
+        if ai_run(app.clone(), id, "tags".to_string()).await.is_ok() {
+            ok += 1;
+        }
+    }
+    Ok(ok)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -505,7 +517,8 @@ pub fn run() {
             set_tags,
             add_tag_bulk,
             export_metadata,
-            ai_run
+            ai_run,
+            ai_tag_bulk
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

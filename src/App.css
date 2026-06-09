@@ -254,3 +254,8 @@ body {
   word-break: break-word; max-height: 260px; overflow-y: auto;
   font-family: inherit; line-height: 1.55;
 }
+.ai-result-wrap { position: relative; }
+.btn.copy {
+  position: absolute; top: 16px; right: 6px;
+  padding: 2px 8px; font-size: 11px;
+}

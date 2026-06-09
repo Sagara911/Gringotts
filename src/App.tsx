@@ -212,7 +212,17 @@ function Inspector({
             📌 加入参考板<span className="hint">无限画布（后续）</span>
           </button>
         </div>
-        {aiResult && <pre className="ai-result">{aiResult}</pre>}
+        {aiResult && (
+          <div className="ai-result-wrap">
+            <pre className="ai-result">{aiResult}</pre>
+            <button
+              className="btn copy"
+              onClick={() => navigator.clipboard.writeText(aiResult)}
+            >
+              复制
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -316,6 +326,21 @@ function App() {
       setAiResult(`失败：${e}`);
     } finally {
       setAiBusy(null);
+    }
+  }
+
+  async function aiTagBulk() {
+    if (sel.size === 0) return;
+    try {
+      setBusy(true);
+      setStatus(`AI 自动打标中…（${sel.size} 项，可能较慢）`);
+      const n = await invoke<number>("ai_tag_bulk", { ids: Array.from(sel) });
+      await reload();
+      setStatus(`已为 ${n} 项自动打标`);
+    } catch (e) {
+      setStatus(`批量打标失败：${e}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -510,6 +535,9 @@ function App() {
             />
             <button className="btn" onClick={applyBatchTag}>
               打标签
+            </button>
+            <button className="btn primary" onClick={aiTagBulk} disabled={busy}>
+              ✨ AI 自动打标
             </button>
             <button className="btn" onClick={() => setSel(new Set())}>
               清除选择
