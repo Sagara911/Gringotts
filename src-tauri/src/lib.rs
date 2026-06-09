@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -25,6 +26,8 @@ struct Asset {
     added_at: i64,
     /// 缓存缩略图的绝对路径（可能为空，前端回退到原图）
     thumb: String,
+    /// 主色调（hex 数组，第一个为最主要色）
+    colors: Vec<String>,
 }
 
 const IMAGE_EXTS: &[&str] = &[
@@ -39,7 +42,6 @@ fn db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
     let conn = Connection::open(db_path(app)?).map_err(|e| e.to_string())?;
-    // 预留 embed_model_version 字段给后续向量检索（换嵌入模型时识别并重建索引）
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS assets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,12 +57,14 @@ fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
             tags TEXT,
             added_at INTEGER,
             thumb TEXT,
+            colors TEXT,
             embed_model_version TEXT
         );",
     )
     .map_err(|e| e.to_string())?;
     // 旧库迁移：补列（已存在则报错，忽略即可）
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN thumb TEXT", []);
+    let _ = conn.execute("ALTER TABLE assets ADD COLUMN colors TEXT", []);
     Ok(conn)
 }
 
@@ -80,6 +84,69 @@ fn now_secs() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+/// 从图像中提取主色调（量化到 8 级/通道，取出现最多的几个桶）
+fn dominant_colors(img: &image::DynamicImage) -> Vec<String> {
+    let small = img.thumbnail(48, 48).to_rgb8();
+    let mut counts: HashMap<(u8, u8, u8), u32> = HashMap::new();
+    for p in small.pixels() {
+        let key = (p[0] >> 5, p[1] >> 5, p[2] >> 5);
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    let mut v: Vec<((u8, u8, u8), u32)> = counts.into_iter().collect();
+    v.sort_by(|a, b| b.1.cmp(&a.1));
+    v.into_iter()
+        .take(5)
+        .map(|((r, g, b), _)| {
+            // 还原成桶中心代表色
+            let rr = (r << 5) | 16;
+            let gg = (g << 5) | 16;
+            let bb = (b << 5) | 16;
+            format!("#{:02x}{:02x}{:02x}", rr, gg, bb)
+        })
+        .collect()
+}
+
+/// 公共查询：读出全部素材
+fn fetch_assets(conn: &Connection) -> Result<Vec<Asset>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id,path,name,format,width,height,size_bytes,folder,source,author,tags,added_at,thumb,colors
+             FROM assets ORDER BY added_at DESC, id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            let tags_json: String = row.get(10).unwrap_or_else(|_| "[]".to_string());
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            let colors_json: String = row.get(13).unwrap_or_else(|_| "[]".to_string());
+            let colors: Vec<String> = serde_json::from_str(&colors_json).unwrap_or_default();
+            Ok(Asset {
+                id: row.get(0)?,
+                path: row.get(1)?,
+                name: row.get(2)?,
+                format: row.get(3).unwrap_or_default(),
+                width: row.get(4).unwrap_or(0),
+                height: row.get(5).unwrap_or(0),
+                size_bytes: row.get(6).unwrap_or(0),
+                folder: row.get(7).unwrap_or_default(),
+                source: row.get(8).unwrap_or_default(),
+                author: row.get(9).unwrap_or_default(),
+                tags,
+                added_at: row.get(11).unwrap_or(0),
+                thumb: row.get(12).unwrap_or_default(),
+                colors,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(out)
 }
 
 /// 扫描文件夹（递归），把图片文件入库。返回本次新增数量。
@@ -121,7 +188,6 @@ fn import_folder(app: tauri::AppHandle, path: String) -> Result<usize, String> {
             .to_string();
         let path_str = p.to_string_lossy().to_string();
 
-        // INSERT OR IGNORE：path 唯一，重复导入不会产生重复记录
         let changed = conn
             .execute(
                 "INSERT OR IGNORE INTO assets
@@ -148,44 +214,11 @@ fn import_folder(app: tauri::AppHandle, path: String) -> Result<usize, String> {
     Ok(added)
 }
 
-/// 返回库中所有素材（按导入时间倒序）
+/// 返回库中所有素材
 #[tauri::command]
 fn list_assets(app: tauri::AppHandle) -> Result<Vec<Asset>, String> {
     let conn = open_db(&app)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id,path,name,format,width,height,size_bytes,folder,source,author,tags,added_at,thumb
-             FROM assets ORDER BY added_at DESC, id DESC",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-        .query_map([], |row| {
-            let tags_json: String = row.get(10).unwrap_or_else(|_| "[]".to_string());
-            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
-            Ok(Asset {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                name: row.get(2)?,
-                format: row.get(3).unwrap_or_default(),
-                width: row.get(4).unwrap_or(0),
-                height: row.get(5).unwrap_or(0),
-                size_bytes: row.get(6).unwrap_or(0),
-                folder: row.get(7).unwrap_or_default(),
-                source: row.get(8).unwrap_or_default(),
-                author: row.get(9).unwrap_or_default(),
-                tags,
-                added_at: row.get(11).unwrap_or(0),
-                thumb: row.get(12).unwrap_or_default(),
-            })
-        })
-        .map_err(|e| e.to_string())?;
-
-    let mut out = Vec::new();
-    for r in rows {
-        out.push(r.map_err(|e| e.to_string())?);
-    }
-    Ok(out)
+    fetch_assets(&conn)
 }
 
 /// 清空库（开发期方便重置）
@@ -197,42 +230,145 @@ fn clear_assets(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 为缺少缩略图的素材生成缓存缩略图（400px 长边，PNG 保留透明）。返回本次生成数量。
+/// 为缺缩略图或缺主色的素材补齐缩略图(400px PNG)与主色调。返回本次处理数量。
 #[tauri::command]
 fn build_thumbnails(app: tauri::AppHandle) -> Result<usize, String> {
     let dir = thumbs_dir(&app)?;
     let conn = open_db(&app)?;
 
-    // 先收集待处理项，避免持有 stmt 借用时再写库
-    let todo: Vec<(i64, String)> = {
+    let todo: Vec<(i64, String, String)> = {
         let mut stmt = conn
-            .prepare("SELECT id,path FROM assets WHERE thumb IS NULL OR thumb=''")
+            .prepare(
+                "SELECT id,path,COALESCE(thumb,'') FROM assets
+                 WHERE thumb IS NULL OR thumb='' OR colors IS NULL OR colors=''",
+            )
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
             })
             .map_err(|e| e.to_string())?;
         rows.filter_map(|r| r.ok()).collect()
     };
 
     let mut done = 0usize;
-    for (id, path) in todo {
-        let thumb_path = dir.join(format!("{id}.png"));
-        // 解码失败（损坏 / 暂不支持的格式如部分 avif）就跳过，前端回退原图
-        if let Ok(img) = image::open(&path) {
-            let t = img.thumbnail(400, 400);
-            if t.save(&thumb_path).is_ok() {
-                let tp = thumb_path.to_string_lossy().to_string();
-                let _ = conn.execute(
-                    "UPDATE assets SET thumb=?1 WHERE id=?2",
-                    rusqlite::params![tp, id],
-                );
-                done += 1;
-            }
+    for (id, path, thumb) in todo {
+        let mut thumb_str = thumb.clone();
+        // 优先用已有缩略图（小图、解码快）来算主色；没有则解码原图并生成缩略图
+        let work: Option<image::DynamicImage> =
+            if !thumb.is_empty() && std::path::Path::new(&thumb).exists() {
+                image::open(&thumb).ok()
+            } else if let Ok(img) = image::open(&path) {
+                let t = img.thumbnail(400, 400);
+                let tp = dir.join(format!("{id}.png"));
+                if t.save(&tp).is_ok() {
+                    thumb_str = tp.to_string_lossy().to_string();
+                }
+                Some(t)
+            } else {
+                None
+            };
+
+        if let Some(im) = work {
+            let colors = dominant_colors(&im);
+            let cj = serde_json::to_string(&colors).unwrap_or_else(|_| "[]".to_string());
+            let _ = conn.execute(
+                "UPDATE assets SET thumb=?1, colors=?2 WHERE id=?3",
+                rusqlite::params![thumb_str, cj, id],
+            );
+            done += 1;
         }
     }
     Ok(done)
+}
+
+/// 覆盖设置某素材的标签
+#[tauri::command]
+fn set_tags(app: tauri::AppHandle, id: i64, tags: Vec<String>) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    let cj = serde_json::to_string(&tags).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE assets SET tags=?1 WHERE id=?2",
+        rusqlite::params![cj, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 批量给多个素材添加同一个标签
+#[tauri::command]
+fn add_tag_bulk(app: tauri::AppHandle, ids: Vec<i64>, tag: String) -> Result<(), String> {
+    let t = tag.trim().to_string();
+    if t.is_empty() {
+        return Ok(());
+    }
+    let conn = open_db(&app)?;
+    for id in ids {
+        let cur: String = conn
+            .query_row(
+                "SELECT COALESCE(tags,'[]') FROM assets WHERE id=?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap_or_else(|_| "[]".to_string());
+        let mut tags: Vec<String> = serde_json::from_str(&cur).unwrap_or_default();
+        if !tags.contains(&t) {
+            tags.push(t.clone());
+        }
+        let cj = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
+        let _ = conn.execute(
+            "UPDATE assets SET tags=?1 WHERE id=?2",
+            rusqlite::params![cj, id],
+        );
+    }
+    Ok(())
+}
+
+fn csv_escape(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// 导出全部素材元数据到指定路径（json / csv）。返回导出条数。体现"数据不锁定"。
+#[tauri::command]
+fn export_metadata(app: tauri::AppHandle, path: String, format: String) -> Result<usize, String> {
+    let conn = open_db(&app)?;
+    let assets = fetch_assets(&conn)?;
+
+    let content = if format.to_lowercase() == "csv" {
+        let mut s =
+            String::from("id,name,format,width,height,size_bytes,folder,source,author,tags,path\n");
+        for a in &assets {
+            let tags = a.tags.join("|");
+            s.push_str(&format!(
+                "{},{},{},{},{},{},{},{},{},{},{}\n",
+                a.id,
+                csv_escape(&a.name),
+                a.format,
+                a.width,
+                a.height,
+                a.size_bytes,
+                csv_escape(&a.folder),
+                csv_escape(&a.source),
+                csv_escape(&a.author),
+                csv_escape(&tags),
+                csv_escape(&a.path),
+            ));
+        }
+        s
+    } else {
+        serde_json::to_string_pretty(&assets).map_err(|e| e.to_string())?
+    };
+
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(assets.len())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -244,7 +380,10 @@ pub fn run() {
             import_folder,
             list_assets,
             clear_assets,
-            build_thumbnails
+            build_thumbnails,
+            set_tags,
+            add_tag_bulk,
+            export_metadata
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
