@@ -236,6 +236,24 @@ fn clear_assets(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 从库移除一条记录（只删数据库与缩略图缓存，**不动原图**，符合"数据不锁定"）
+#[tauri::command]
+fn remove_asset(app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    if let Ok(thumb) = conn.query_row(
+        "SELECT COALESCE(thumb,'') FROM assets WHERE id=?1",
+        rusqlite::params![id],
+        |r| r.get::<_, String>(0),
+    ) {
+        if !thumb.is_empty() {
+            let _ = fs::remove_file(&thumb);
+        }
+    }
+    conn.execute("DELETE FROM assets WHERE id=?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// 为缺缩略图或缺主色的素材补齐缩略图(400px PNG)与主色调。返回本次处理数量。
 #[tauri::command]
 fn build_thumbnails(app: tauri::AppHandle) -> Result<usize, String> {
@@ -523,7 +541,8 @@ pub fn run() {
             add_tag_bulk,
             export_metadata,
             ai_run,
-            ai_tag_bulk
+            ai_tag_bulk,
+            remove_asset
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

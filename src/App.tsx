@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { openUrl, openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./App.css";
+
+const DOBBY_URL = "https://dobby-aih.pages.dev/";
 
 interface Asset {
   id: number;
@@ -322,14 +325,24 @@ function App() {
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("time");
+  const [ctx, setCtx] = useState<{ x: number; y: number; asset: Asset } | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSel(new Set());
+      if (e.key === "Escape") {
+        setSel(new Set());
+        setCtx(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  async function removeAsset(id: number) {
+    await invoke("remove_asset", { id });
+    if (selectedId === id) setSelectedId(null);
+    await reload();
+  }
 
   const reload = useCallback(async () => {
     try {
@@ -673,6 +686,12 @@ function App() {
                   (sel.has(a.id) ? " multi" : "")
                 }
                 onClick={(e) => onCardClick(e, a.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setSelectedId(a.id);
+                  setAiResult("");
+                  setCtx({ x: e.clientX, y: e.clientY, asset: a });
+                }}
               >
                 <div className="thumb">
                   {a.missing && <span className="badge-missing">⚠ 失效</span>}
@@ -703,6 +722,70 @@ function App() {
         aiBusy={aiBusy}
         aiResult={aiResult}
       />
+
+      {ctx && (
+        <>
+          <div
+            className="ctx-overlay"
+            onClick={() => setCtx(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCtx(null);
+            }}
+          />
+          <div className="ctx-menu" style={{ left: ctx.x, top: ctx.y }}>
+            <div
+              className="ctx-item"
+              onClick={() => {
+                revealItemInDir(ctx.asset.path);
+                setCtx(null);
+              }}
+            >
+              📂 在资源管理器中显示
+            </div>
+            <div
+              className="ctx-item"
+              onClick={() => {
+                openPath(ctx.asset.path);
+                setCtx(null);
+              }}
+            >
+              🖼 用默认程序打开
+            </div>
+            <div
+              className="ctx-item"
+              onClick={() => {
+                navigator.clipboard.writeText(ctx.asset.path);
+                setStatus("已复制路径");
+                setCtx(null);
+              }}
+            >
+              📋 复制路径
+            </div>
+            <div
+              className="ctx-item"
+              onClick={() => {
+                navigator.clipboard.writeText(ctx.asset.path);
+                openUrl(DOBBY_URL);
+                setStatus("已打开 Dobby（路径已复制，可直接拖图进去处理）");
+                setCtx(null);
+              }}
+            >
+              🧦 用 Dobby 处理
+            </div>
+            <div className="ctx-sep" />
+            <div
+              className="ctx-item danger"
+              onClick={() => {
+                removeAsset(ctx.asset.id);
+                setCtx(null);
+              }}
+            >
+              🗑 从库移除（不删原图）
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

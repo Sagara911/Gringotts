@@ -290,3 +290,18 @@ body {
   background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
   border-radius: 6px; padding: 3px 6px; font-size: 12px; outline: none; cursor: pointer;
 }
+
+/* 右键菜单 */
+.ctx-overlay { position: fixed; inset: 0; z-index: 50; }
+.ctx-menu {
+  position: fixed; z-index: 51; min-width: 200px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.ctx-item {
+  padding: 7px 12px; font-size: 13px; border-radius: 5px;
+  cursor: pointer; color: var(--text); white-space: nowrap;
+}
+.ctx-item:hover { background: var(--hover); }
+.ctx-item.danger { color: #e06a5a; }
+.ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
