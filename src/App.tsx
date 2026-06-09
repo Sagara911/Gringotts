@@ -4,6 +4,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl, openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
 import { textVector, imageVector } from "./clip";
+import Board, { type BoardImage } from "./Board";
 import "./App.css";
 
 const DOBBY_URL = "https://dobby-aih.pages.dev/";
@@ -127,6 +128,7 @@ function Inspector({
   aiBusy,
   aiResult,
   onSimilar,
+  onAddBoard,
 }: {
   asset: Asset | null;
   onAddTag: (id: number, tag: string) => void;
@@ -135,6 +137,7 @@ function Inspector({
   aiBusy: string | null;
   aiResult: string;
   onSimilar: (id: number) => void;
+  onAddBoard: (id: number) => void;
 }) {
   const [tagInput, setTagInput] = useState("");
   if (!asset) {
@@ -219,8 +222,8 @@ function Inspector({
           <button className="ai-btn" onClick={() => onSimilar(asset.id)}>
             找相似<span className="hint">语义向量检索视觉/题材近似</span>
           </button>
-          <button className="ai-btn" disabled>
-            📌 加入参考板<span className="hint">无限画布（后续）</span>
+          <button className="ai-btn" onClick={() => onAddBoard(asset.id)}>
+            📌 加入参考板<span className="hint">摊到无限画布上对着画</span>
           </button>
         </div>
         {aiResult && (
@@ -525,6 +528,16 @@ function App() {
   const [searchMode, setSearchMode] = useState<"name" | "semantic">("name");
   const [semanticIds, setSemanticIds] = useState<number[] | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
+  const [boardImages, setBoardImages] = useState<BoardImage[]>([]);
+
+  function toBoardImg(a: Asset): BoardImage {
+    return { id: a.id, path: a.thumb || a.path, name: a.name, width: a.width, height: a.height };
+  }
+  function openBoardWith(list: Asset[]) {
+    setBoardImages(list.map(toBoardImg));
+    setBoardOpen(true);
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -835,6 +848,9 @@ function App() {
             ✨ 语义
           </button>
         </div>
+        <button className="btn" onClick={() => openBoardWith([])} title="打开参考板（无限画布）">
+          📌 参考板
+        </button>
         <button className="btn" onClick={() => setShowSettings(true)} title="AI 设置（本地 / 云端 API）">
           ⚙️
         </button>
@@ -958,6 +974,12 @@ function App() {
             <button className="btn primary" onClick={aiTagBulk} disabled={busy}>
               ✨ AI 自动打标
             </button>
+            <button
+              className="btn"
+              onClick={() => openBoardWith(assets.filter((a) => sel.has(a.id)))}
+            >
+              📌 加入参考板
+            </button>
             <button className="btn" onClick={() => setSel(new Set())}>
               清除选择
             </button>
@@ -1020,7 +1042,21 @@ function App() {
         aiBusy={aiBusy}
         aiResult={aiResult}
         onSimilar={onSimilar}
+        onAddBoard={(id) => {
+          const a = assets.find((x) => x.id === id);
+          if (a) openBoardWith([a]);
+        }}
       />
+
+      {boardOpen && (
+        <Board
+          images={boardImages}
+          onClose={() => {
+            setBoardOpen(false);
+            setBoardImages([]);
+          }}
+        />
+      )}
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 

@@ -352,3 +352,15 @@ body {
 .warn-text { color: #e0a85a; font-size: 13px; }
 .pull-bar { height: 6px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
 .pull-fill { height: 100%; background: var(--gold); transition: width 0.2s; }
+
+/* 参考板（tldraw 无限画布） */
+.board-overlay {
+  position: fixed; inset: 0; z-index: 80; background: var(--bg);
+  display: flex; flex-direction: column;
+}
+.board-top {
+  height: 48px; flex: 0 0 48px; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 16px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.board-canvas { flex: 1; position: relative; min-height: 0; }
