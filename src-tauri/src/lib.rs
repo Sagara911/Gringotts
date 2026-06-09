@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use base64::Engine;
 use rusqlite::Connection;
 use serde::Serialize;
 use tauri::Manager;
@@ -371,6 +372,126 @@ fn export_metadata(app: tauri::AppHandle, path: String, format: String) -> Resul
     Ok(assets.len())
 }
 
+// ===== AI（Vision Provider，默认本地 Ollama，OpenAI 兼容，可用环境变量覆盖）=====
+
+fn image_data_uri(path: &str) -> Result<String, String> {
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let lower = path.to_lowercase();
+    let mime = if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else {
+        "image/png"
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
+/// (base_url, model, api_key)；默认本地 Ollama，可用环境变量覆盖以接入 DeepSeek/GPT 等
+fn ai_config() -> (String, String, String) {
+    let base = std::env::var("GRINGOTTS_AI_BASE")
+        .unwrap_or_else(|_| "http://localhost:11434/v1".to_string());
+    let model = std::env::var("GRINGOTTS_AI_MODEL").unwrap_or_else(|_| "gemma4:e4b".to_string());
+    let key = std::env::var("GRINGOTTS_AI_KEY").unwrap_or_else(|_| "ollama".to_string());
+    (base, model, key)
+}
+
+/// 对某素材跑一次视觉模型。mode: "tags" | "prompt" | "describe"。
+/// tags 模式会把结果合并写回标签。返回模型文本。
+#[tauri::command]
+async fn ai_run(app: tauri::AppHandle, id: i64, mode: String) -> Result<String, String> {
+    // 取图片路径（优先缩略图，体积小、推理快）
+    let img_path: String = {
+        let conn = open_db(&app)?;
+        conn.query_row(
+            "SELECT COALESCE(NULLIF(thumb,''), path) FROM assets WHERE id=?1",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?
+    };
+    let data_uri = image_data_uri(&img_path)?;
+
+    let prompt = match mode.as_str() {
+        "tags" => "请用中文为这张图片生成 6-10 个简短标签，覆盖：题材/主体、风格、场景、配色、明暗氛围。只输出标签本身，用英文逗号 , 分隔，不要编号、不要解释。",
+        "prompt" => "Generate a single Stable Diffusion / Midjourney style prompt (comma-separated English keywords) describing this reference image: subject, style, lighting, composition, camera, quality. Output ONLY the prompt text.",
+        _ => "用中文分析这张画面：构图、打光、配色、风格特点。简明扼要，分点列出。",
+    };
+
+    let (base, model, key) = ai_config();
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": model,
+        "stream": false,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": data_uri}}
+            ]
+        }]
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", key))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("请求 AI 服务失败：{e}（确认 Ollama 在运行）"))?;
+    if !resp.status().is_success() {
+        let st = resp.status();
+        let t = resp.text().await.unwrap_or_default();
+        return Err(format!("AI 服务返回 {st}: {t}"));
+    }
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let content = v["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if content.is_empty() {
+        return Err("AI 返回空结果".to_string());
+    }
+
+    // tags 模式：解析并合并写回
+    if mode == "tags" {
+        let new_tags: Vec<String> = content
+            .split(|c| c == ',' || c == '，' || c == '、' || c == '\n')
+            .map(|s| {
+                s.trim()
+                    .trim_matches(|c| c == '#' || c == '-' || c == '*' || c == '.')
+                    .trim()
+                    .to_string()
+            })
+            .filter(|s| !s.is_empty() && s.chars().count() <= 12)
+            .collect();
+        let conn = open_db(&app)?;
+        let cur: String = conn
+            .query_row(
+                "SELECT COALESCE(tags,'[]') FROM assets WHERE id=?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap_or_else(|_| "[]".to_string());
+        let mut tags: Vec<String> = serde_json::from_str(&cur).unwrap_or_default();
+        for t in new_tags {
+            if !tags.contains(&t) {
+                tags.push(t);
+            }
+        }
+        let cj = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
+        let _ = conn.execute(
+            "UPDATE assets SET tags=?1 WHERE id=?2",
+            rusqlite::params![cj, id],
+        );
+    }
+
+    Ok(content)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -383,7 +504,8 @@ pub fn run() {
             build_thumbnails,
             set_tags,
             add_tag_bulk,
-            export_metadata
+            export_metadata,
+            ai_run
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

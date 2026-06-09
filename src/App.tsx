@@ -114,10 +114,16 @@ function Inspector({
   asset,
   onAddTag,
   onRemoveTag,
+  onAi,
+  aiBusy,
+  aiResult,
 }: {
   asset: Asset | null;
   onAddTag: (id: number, tag: string) => void;
   onRemoveTag: (id: number, tag: string) => void;
+  onAi: (id: number, mode: string) => void;
+  aiBusy: string | null;
+  aiResult: string;
 }) {
   const [tagInput, setTagInput] = useState("");
   if (!asset) {
@@ -183,22 +189,30 @@ function Inspector({
       </div>
 
       <div className="section">
-        <h5>✨ AI 操作</h5>
+        <h5>
+          ✨ AI 操作 <span className="dim" style={{ fontWeight: 400 }}>· Gemma 4（本地）</span>
+        </h5>
         <div className="ai-actions">
-          <button className="ai-btn">
-            反推绘画提示词<span className="hint">从这张图生成 SD/MJ 提示词</span>
+          <button className="ai-btn" disabled={!!aiBusy} onClick={() => onAi(asset.id, "prompt")}>
+            {aiBusy === "prompt" ? "生成中…" : "反推绘画提示词"}
+            <span className="hint">从这张图生成 SD/MJ 提示词</span>
           </button>
-          <button className="ai-btn">
-            自动打标签<span className="hint">Gemma / WD14（阶段二接入）</span>
+          <button className="ai-btn" disabled={!!aiBusy} onClick={() => onAi(asset.id, "tags")}>
+            {aiBusy === "tags" ? "识别中…" : "自动打标签"}
+            <span className="hint">Gemma 看图生成标签并写入</span>
           </button>
-          <button className="ai-btn">
-            找相似<span className="hint">向量检索视觉近似素材（阶段二）</span>
+          <button className="ai-btn" disabled={!!aiBusy} onClick={() => onAi(asset.id, "describe")}>
+            {aiBusy === "describe" ? "分析中…" : "分析画面"}
+            <span className="hint">打光 / 构图 / 配色拉片</span>
           </button>
-          <button className="ai-btn">
-            📌 加入参考板<span className="hint">摊到无限画布上对着画</span>
+          <button className="ai-btn" disabled>
+            找相似<span className="hint">向量检索（阶段二 · CLIP）</span>
+          </button>
+          <button className="ai-btn" disabled>
+            📌 加入参考板<span className="hint">无限画布（后续）</span>
           </button>
         </div>
-        <div className="placeholder-note">* AI 功能为占位，待接入本地模型 / API</div>
+        {aiResult && <pre className="ai-result">{aiResult}</pre>}
       </div>
     </section>
   );
@@ -213,6 +227,8 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [batchTag, setBatchTag] = useState("");
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState("");
 
   const reload = useCallback(async () => {
     try {
@@ -289,6 +305,20 @@ function App() {
     await invoke("set_tags", { id, tags: a.tags.filter((t) => t !== tag) });
     await reload();
   }
+  async function aiRun(id: number, mode: string) {
+    try {
+      setAiBusy(mode);
+      setAiResult("");
+      const out = await invoke<string>("ai_run", { id, mode });
+      setAiResult(out);
+      if (mode === "tags") await reload();
+    } catch (e) {
+      setAiResult(`失败：${e}`);
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
   async function applyBatchTag() {
     const t = batchTag.trim();
     if (!t || sel.size === 0) return;
@@ -310,6 +340,7 @@ function App() {
       setSel(new Set([id]));
     }
     setSelectedId(id);
+    setAiResult("");
   }
 
   // ===== 侧边栏派生数据 =====
@@ -525,7 +556,14 @@ function App() {
         )}
       </main>
 
-      <Inspector asset={selected} onAddTag={addTag} onRemoveTag={removeTag} />
+      <Inspector
+        asset={selected}
+        onAddTag={addTag}
+        onRemoveTag={removeTag}
+        onAi={aiRun}
+        aiBusy={aiBusy}
+        aiResult={aiResult}
+      />
     </div>
   );
 }
