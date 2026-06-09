@@ -18,11 +18,13 @@ let _clip: any = null;
 async function clip() {
   if (_clip) return _clip;
   const t = await lib();
+  // dtype fp32：webview 的 onnxruntime-web 对 4-bit 量化(MatMulNBits)兼容差，用全精度最稳
+  const opt = { dtype: "fp32" as const };
   const [tok, tmodel, proc, vmodel] = await Promise.all([
     t.AutoTokenizer.from_pretrained(CLIP_ID),
-    t.CLIPTextModelWithProjection.from_pretrained(CLIP_ID),
+    t.CLIPTextModelWithProjection.from_pretrained(CLIP_ID, opt),
     t.AutoProcessor.from_pretrained(CLIP_ID),
-    t.CLIPVisionModelWithProjection.from_pretrained(CLIP_ID),
+    t.CLIPVisionModelWithProjection.from_pretrained(CLIP_ID, opt),
   ]);
   _clip = { RawImage: t.RawImage, tok, tmodel, proc, vmodel };
   return _clip;
@@ -33,7 +35,7 @@ let _tr: any = null;
 async function translateIfCN(text: string): Promise<string> {
   if (!/[一-鿿]/.test(text)) return text; // 无中文则跳过翻译
   const t = await lib();
-  if (!_tr) _tr = await t.pipeline("translation", MT_ID);
+  if (!_tr) _tr = await t.pipeline("translation", MT_ID, { dtype: "fp32" });
   const out = await _tr(text);
   return out?.[0]?.translation_text || text;
 }
