@@ -16,6 +16,7 @@ interface Asset {
   author: string;
   tags: string[];
   addedAt: number;
+  thumb: string;
 }
 
 function humanSize(bytes: number): string {
@@ -110,9 +111,23 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    reload();
+  const buildThumbs = useCallback(async () => {
+    try {
+      setStatus("正在生成缩略图…");
+      const n = await invoke<number>("build_thumbnails");
+      if (n > 0) await reload();
+      setStatus(n > 0 ? `已生成 ${n} 张缩略图` : "");
+    } catch (e) {
+      setStatus(`缩略图生成失败：${e}`);
+    }
   }, [reload]);
+
+  useEffect(() => {
+    (async () => {
+      await reload();
+      buildThumbs();
+    })();
+  }, [reload, buildThumbs]);
 
   async function handleImport() {
     try {
@@ -123,6 +138,7 @@ function App() {
       const added = await invoke<number>("import_folder", { path: dir });
       await reload();
       setStatus(`已导入 ${added} 张新素材`);
+      await buildThumbs();
     } catch (e) {
       setStatus(`导入失败：${e}`);
     } finally {
@@ -201,7 +217,7 @@ function App() {
                 onClick={() => setSelectedId(a.id)}
               >
                 <div className="thumb">
-                  <img src={convertFileSrc(a.path)} loading="lazy" alt={a.name} />
+                  <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
                 </div>
                 <div className="meta">
                   <div className="name" title={a.name}>

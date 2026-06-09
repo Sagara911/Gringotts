@@ -23,6 +23,8 @@ struct Asset {
     author: String,
     tags: Vec<String>,
     added_at: i64,
+    /// 缓存缩略图的绝对路径（可能为空，前端回退到原图）
+    thumb: String,
 }
 
 const IMAGE_EXTS: &[&str] = &[
@@ -52,11 +54,25 @@ fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
             author TEXT,
             tags TEXT,
             added_at INTEGER,
+            thumb TEXT,
             embed_model_version TEXT
         );",
     )
     .map_err(|e| e.to_string())?;
+    // 旧库迁移：补列（已存在则报错，忽略即可）
+    let _ = conn.execute("ALTER TABLE assets ADD COLUMN thumb TEXT", []);
     Ok(conn)
+}
+
+/// 缩略图缓存目录
+fn thumbs_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("thumbnails");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
 fn now_secs() -> i64 {
@@ -138,7 +154,7 @@ fn list_assets(app: tauri::AppHandle) -> Result<Vec<Asset>, String> {
     let conn = open_db(&app)?;
     let mut stmt = conn
         .prepare(
-            "SELECT id,path,name,format,width,height,size_bytes,folder,source,author,tags,added_at
+            "SELECT id,path,name,format,width,height,size_bytes,folder,source,author,tags,added_at,thumb
              FROM assets ORDER BY added_at DESC, id DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -160,6 +176,7 @@ fn list_assets(app: tauri::AppHandle) -> Result<Vec<Asset>, String> {
                 author: row.get(9).unwrap_or_default(),
                 tags,
                 added_at: row.get(11).unwrap_or(0),
+                thumb: row.get(12).unwrap_or_default(),
             })
         })
         .map_err(|e| e.to_string())?;
@@ -180,6 +197,44 @@ fn clear_assets(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 为缺少缩略图的素材生成缓存缩略图（400px 长边，PNG 保留透明）。返回本次生成数量。
+#[tauri::command]
+fn build_thumbnails(app: tauri::AppHandle) -> Result<usize, String> {
+    let dir = thumbs_dir(&app)?;
+    let conn = open_db(&app)?;
+
+    // 先收集待处理项，避免持有 stmt 借用时再写库
+    let todo: Vec<(i64, String)> = {
+        let mut stmt = conn
+            .prepare("SELECT id,path FROM assets WHERE thumb IS NULL OR thumb=''")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let mut done = 0usize;
+    for (id, path) in todo {
+        let thumb_path = dir.join(format!("{id}.png"));
+        // 解码失败（损坏 / 暂不支持的格式如部分 avif）就跳过，前端回退原图
+        if let Ok(img) = image::open(&path) {
+            let t = img.thumbnail(400, 400);
+            if t.save(&thumb_path).is_ok() {
+                let tp = thumb_path.to_string_lossy().to_string();
+                let _ = conn.execute(
+                    "UPDATE assets SET thumb=?1 WHERE id=?2",
+                    rusqlite::params![tp, id],
+                );
+                done += 1;
+            }
+        }
+    }
+    Ok(done)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -188,7 +243,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             import_folder,
             list_assets,
-            clear_assets
+            clear_assets,
+            build_thumbnails
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
