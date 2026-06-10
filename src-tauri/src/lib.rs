@@ -38,6 +38,9 @@ struct Asset {
 const IMAGE_EXTS: &[&str] = &[
     "jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "avif",
 ];
+/// 视频格式：可导入与播放预览；不做缩略图/配色/CLIP（webview 原生渲染首帧）
+const VIDEO_EXTS: &[&str] = &["mp4", "webm", "mov", "mkv", "avi"];
+const VIDEO_FORMATS_SQL: &str = "('MP4','WEBM','MOV','MKV','AVI')";
 
 fn db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -70,6 +73,11 @@ fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
+        );
+        CREATE TABLE IF NOT EXISTS ai_commands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            prompt TEXT NOT NULL
         );",
     )
     .map_err(|e| e.to_string())?;
@@ -182,7 +190,7 @@ fn scan_path(conn: &Connection, path: &str, now: i64) -> Result<usize, String> {
             .and_then(|s| s.to_str())
             .map(|s| s.to_lowercase())
             .unwrap_or_default();
-        if !IMAGE_EXTS.contains(&ext.as_str()) {
+        if !IMAGE_EXTS.contains(&ext.as_str()) && !VIDEO_EXTS.contains(&ext.as_str()) {
             continue;
         }
 
@@ -303,10 +311,11 @@ fn build_thumbnails(app: tauri::AppHandle) -> Result<usize, String> {
 
     let todo: Vec<(i64, String, String)> = {
         let mut stmt = conn
-            .prepare(
+            .prepare(&format!(
                 "SELECT id,path,COALESCE(thumb,'') FROM assets
-                 WHERE thumb IS NULL OR thumb='' OR colors IS NULL OR colors=''",
-            )
+                 WHERE (thumb IS NULL OR thumb='' OR colors IS NULL OR colors='')
+                 AND UPPER(COALESCE(format,'')) NOT IN {VIDEO_FORMATS_SQL}"
+            ))
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
@@ -489,13 +498,10 @@ fn ai_config(app: &tauri::AppHandle) -> (String, String, String) {
     )
 }
 
-/// 对某素材跑一次视觉模型。mode: "tags" | "prompt" | "describe"。
-/// tags 模式会把结果合并写回标签。返回模型文本。
-#[tauri::command]
-async fn ai_run(app: tauri::AppHandle, id: i64, mode: String) -> Result<String, String> {
-    // 取图片路径（优先缩略图，体积小、推理快）
+/// 视觉调用核心：取图（优先缩略图）→ 调 Vision Provider → 返回文本
+async fn run_vision(app: &tauri::AppHandle, id: i64, prompt: &str) -> Result<String, String> {
     let img_path: String = {
-        let conn = open_db(&app)?;
+        let conn = open_db(app)?;
         conn.query_row(
             "SELECT COALESCE(NULLIF(thumb,''), path) FROM assets WHERE id=?1",
             rusqlite::params![id],
@@ -505,14 +511,7 @@ async fn ai_run(app: tauri::AppHandle, id: i64, mode: String) -> Result<String, 
     };
     let data_uri = image_data_uri(&img_path)?;
 
-    let prompt = match mode.as_str() {
-        "tags" => "请用中文为这张图片生成 6-10 个简短标签，覆盖：题材/主体、风格、场景、配色、明暗氛围。只输出标签本身，用英文逗号 , 分隔，不要编号、不要解释。",
-        "prompt" => "Generate a single Stable Diffusion / Midjourney style prompt (comma-separated English keywords) describing this reference image: subject, style, lighting, composition, camera, quality. Output ONLY the prompt text.",
-        "caption" => "用中文一句话（40字以内）概括这张图：主体、风格、场景、配色、氛围。只输出这一句话，不要解释、不要换行。",
-        _ => "用中文分析这张画面：构图、打光、配色、风格特点。简明扼要，分点列出。",
-    };
-
-    let (base, model, key) = ai_config(&app);
+    let (base, model, key) = ai_config(app);
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let body = serde_json::json!({
         "model": model,
@@ -548,6 +547,19 @@ async fn ai_run(app: tauri::AppHandle, id: i64, mode: String) -> Result<String, 
     if content.is_empty() {
         return Err("AI 返回空结果".to_string());
     }
+    Ok(content)
+}
+
+/// 对某素材跑一次内置模式。mode: "tags" | "prompt" | "caption" | 其它=分析。
+#[tauri::command]
+async fn ai_run(app: tauri::AppHandle, id: i64, mode: String) -> Result<String, String> {
+    let prompt = match mode.as_str() {
+        "tags" => "请用中文为这张图片生成 6-10 个简短标签，覆盖：题材/主体、风格、场景、配色、明暗氛围。只输出标签本身，用英文逗号 , 分隔，不要编号、不要解释。",
+        "prompt" => "Generate a single Stable Diffusion / Midjourney style prompt (comma-separated English keywords) describing this reference image: subject, style, lighting, composition, camera, quality. Output ONLY the prompt text.",
+        "caption" => "用中文一句话（40字以内）概括这张图：主体、风格、场景、配色、氛围。只输出这一句话，不要解释、不要换行。",
+        _ => "用中文分析这张画面：构图、打光、配色、风格特点。简明扼要，分点列出。",
+    };
+    let content = run_vision(&app, id, prompt).await?;
 
     // tags 模式：解析并合并写回
     if mode == "tags" {
@@ -595,6 +607,63 @@ async fn ai_tag_bulk(app: tauri::AppHandle, ids: Vec<i64>) -> Result<usize, Stri
         }
     }
     Ok(ok)
+}
+
+// ===== 自定义 AI 指令（用户自己的 prompt 模板库）=====
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AiCommand {
+    id: i64,
+    name: String,
+    prompt: String,
+}
+
+/// 用任意 prompt 对某素材跑一次视觉模型（自定义指令）
+#[tauri::command]
+async fn ai_run_custom(app: tauri::AppHandle, id: i64, prompt: String) -> Result<String, String> {
+    run_vision(&app, id, &prompt).await
+}
+
+#[tauri::command]
+fn list_ai_commands(app: tauri::AppHandle) -> Result<Vec<AiCommand>, String> {
+    let conn = open_db(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT id,name,prompt FROM ai_commands ORDER BY id")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(AiCommand {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                prompt: r.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+#[tauri::command]
+fn save_ai_command(app: tauri::AppHandle, name: String, prompt: String) -> Result<(), String> {
+    let (n, p) = (name.trim(), prompt.trim());
+    if n.is_empty() || p.is_empty() {
+        return Err("名称和指令内容都不能为空".into());
+    }
+    let conn = open_db(&app)?;
+    conn.execute(
+        "INSERT INTO ai_commands(name,prompt) VALUES(?1,?2)",
+        rusqlite::params![n, p],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_ai_command(app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute("DELETE FROM ai_commands WHERE id=?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ===== 语义搜索（文本嵌入：caption→向量；查询→向量；余弦相似）=====
@@ -772,10 +841,11 @@ fn load_clip(app: &tauri::AppHandle) -> Result<Vec<(i64, Vec<f32>)>, String> {
 fn clip_targets(app: tauri::AppHandle) -> Result<Vec<ClipTarget>, String> {
     let conn = open_db(&app)?;
     let mut stmt = conn
-        .prepare(
+        .prepare(&format!(
             "SELECT id, COALESCE(NULLIF(thumb,''), path) FROM assets
-             WHERE clip_embedding IS NULL OR clip_embedding=''",
-        )
+             WHERE (clip_embedding IS NULL OR clip_embedding='')
+             AND UPPER(COALESCE(format,'')) NOT IN {VIDEO_FORMATS_SQL}"
+        ))
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |r| {
@@ -1114,7 +1184,6 @@ fn start_collect_server(app: tauri::AppHandle) {
             }
             if req.method() == &tiny_http::Method::Post && req.url() == "/collect" {
                 let mut body = String::new();
-                use std::io::Read;
                 let _ = req.as_reader().read_to_string(&mut body);
                 let (code, msg) = match handle_collect(&app, &body) {
                     Ok(name) => (200, format!("{{\"ok\":true,\"name\":\"{}\"}}", name)),
@@ -1222,7 +1291,11 @@ pub fn run() {
             import_paths,
             set_favorite,
             find_duplicates,
-            export_extension
+            export_extension,
+            ai_run_custom,
+            list_ai_commands,
+            save_ai_command,
+            delete_ai_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

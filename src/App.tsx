@@ -40,6 +40,15 @@ type Filter =
 
 type SortKey = "time" | "name" | "size";
 
+interface AiCmd {
+  id: number;
+  name: string;
+  prompt: string;
+}
+
+const VIDEO_FORMATS = new Set(["MP4", "WEBM", "MOV", "MKV", "AVI"]);
+const isVideo = (a: Asset) => VIDEO_FORMATS.has(a.format);
+
 function humanSize(bytes: number): string {
   if (!bytes) return "—";
   const u = ["B", "KB", "MB", "GB"];
@@ -134,6 +143,9 @@ function Inspector({
   onSimilar,
   onAddBoard,
   onFav,
+  cmds,
+  onAiCustom,
+  onManageCmds,
 }: {
   asset: Asset | null;
   onAddTag: (id: number, tag: string) => void;
@@ -144,6 +156,9 @@ function Inspector({
   onSimilar: (id: number) => void;
   onAddBoard: (id: number) => void;
   onFav: (id: number, fav: boolean) => void;
+  cmds: AiCmd[];
+  onAiCustom: (id: number, cmd: AiCmd) => void;
+  onManageCmds: () => void;
 }) {
   const [tagInput, setTagInput] = useState("");
   if (!asset) {
@@ -155,7 +170,11 @@ function Inspector({
   }
   return (
     <section className="inspector">
-      <img className="preview" src={convertFileSrc(asset.path)} alt={asset.name} />
+      {isVideo(asset) ? (
+        <video className="preview" src={convertFileSrc(asset.path)} controls muted loop />
+      ) : (
+        <img className="preview" src={convertFileSrc(asset.path)} alt={asset.name} />
+      )}
       <h3 title={asset.name}>
         <button
           className={"fav-btn inline" + (asset.favorite ? " on" : "")}
@@ -239,6 +258,20 @@ function Inspector({
           </button>
           <button className="ai-btn" onClick={() => onAddBoard(asset.id)}>
             📌 加入参考板<span className="hint">摊到无限画布上对着画</span>
+          </button>
+          {cmds.map((c) => (
+            <button
+              key={c.id}
+              className="ai-btn"
+              disabled={!!aiBusy}
+              onClick={() => onAiCustom(asset.id, c)}
+            >
+              {aiBusy === `c${c.id}` ? "执行中…" : c.name}
+              <span className="hint">自定义指令</span>
+            </button>
+          ))}
+          <button className="ai-btn manage" onClick={onManageCmds}>
+            ＋ 自定义指令<span className="hint">添加你自己的看图 prompt</span>
           </button>
         </div>
         {aiResult && (
@@ -560,6 +593,87 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function CmdManagerModal({
+  cmds,
+  onChanged,
+  onClose,
+}: {
+  cmds: AiCmd[];
+  onChanged: () => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [msg, setMsg] = useState("");
+  async function add() {
+    try {
+      await invoke("save_ai_command", { name, prompt });
+      setName("");
+      setPrompt("");
+      setMsg("已添加 ✓");
+      onChanged();
+    } catch (e) {
+      setMsg(`${e}`);
+    }
+  }
+  async function del(id: number) {
+    await invoke("delete_ai_command", { id });
+    onChanged();
+  }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>✨ 自定义 AI 指令</h3>
+        <p className="dim">
+          添加你自己的看图指令（如"分析透视结构""猜画师用了什么笔刷"），保存后出现在详情面板的 AI
+          操作列表里。
+        </p>
+        {cmds.length > 0 && (
+          <div className="cmd-list">
+            {cmds.map((c) => (
+              <div className="cmd-item" key={c.id}>
+                <div className="cmd-info">
+                  <b>{c.name}</b>
+                  <span className="dim" title={c.prompt}>
+                    {c.prompt}
+                  </span>
+                </div>
+                <button className="btn" onClick={() => del(c.id)}>
+                  删除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <label>指令名称</label>
+        <input
+          className="cfg-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="例：分析透视结构"
+        />
+        <label>指令内容（对这张图提的要求）</label>
+        <textarea
+          className="cfg-input"
+          rows={3}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="例：用中文分析这张图的透视类型、视平线位置和消失点，并给出临摹练习建议。"
+        />
+        <div className="modal-actions">
+          <span className="dim">{msg}</span>
+          <button className="btn" onClick={onClose}>
+            关闭
+          </button>
+          <button className="btn primary" onClick={add}>
+            添加
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -579,6 +693,33 @@ function App() {
   const [boardOpen, setBoardOpen] = useState(false);
   const [boardImages, setBoardImages] = useState<BoardImage[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [cmds, setCmds] = useState<AiCmd[]>([]);
+  const [showCmdMgr, setShowCmdMgr] = useState(false);
+
+  const loadCmds = useCallback(async () => {
+    try {
+      setCmds(await invoke<AiCmd[]>("list_ai_commands"));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCmds();
+  }, [loadCmds]);
+
+  async function aiRunCustom(id: number, cmd: AiCmd) {
+    try {
+      setAiBusy(`c${cmd.id}`);
+      setAiResult("");
+      const out = await invoke<string>("ai_run_custom", { id, prompt: cmd.prompt });
+      setAiResult(out);
+    } catch (e) {
+      setAiResult(`失败：${e}`);
+    } finally {
+      setAiBusy(null);
+    }
+  }
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [resultLabel, setResultLabel] = useState("");
 
@@ -1189,7 +1330,14 @@ function App() {
                     >
                       ★
                     </button>
-                    <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
+                    {isVideo(a) ? (
+                      <>
+                        <span className="badge-video">▶</span>
+                        <video src={convertFileSrc(a.path)} preload="metadata" muted />
+                      </>
+                    ) : (
+                      <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
+                    )}
                   </div>
                   <div className="meta">
                     <div className="name" title={a.name}>
@@ -1224,7 +1372,14 @@ function App() {
           const a = assets.find((x) => x.id === id);
           if (a) openBoardWith([a]);
         }}
+        cmds={cmds}
+        onAiCustom={aiRunCustom}
+        onManageCmds={() => setShowCmdMgr(true)}
       />
+
+      {showCmdMgr && (
+        <CmdManagerModal cmds={cmds} onChanged={loadCmds} onClose={() => setShowCmdMgr(false)} />
+      )}
 
       {dragOver && (
         <div className="drop-overlay">

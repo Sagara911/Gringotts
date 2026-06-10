@@ -414,3 +414,34 @@ body {
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
   padding: 0 5px; font-size: 11px;
 }
+
+/* 视频素材 */
+.card .thumb video {
+  width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none;
+}
+.badge-video {
+  position: absolute; bottom: 6px; left: 6px; z-index: 1;
+  background: rgba(0,0,0,0.6); color: #fff; font-size: 11px;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+video.preview { width: 100%; aspect-ratio: auto; max-height: 300px; }
+
+/* 自定义指令管理 */
+.cmd-list {
+  display: flex; flex-direction: column; gap: 6px; margin: 10px 0;
+  max-height: 220px; overflow-y: auto;
+}
+.cmd-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px;
+}
+.cmd-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cmd-info b { font-size: 13px; }
+.cmd-info .dim {
+  font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+textarea.cfg-input { resize: vertical; font-family: inherit; line-height: 1.5; }
+.ai-btn.manage { border-style: dashed; color: var(--text-dim); }
+.ai-btn.manage:hover { color: var(--gold); }
