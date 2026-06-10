@@ -3,6 +3,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl, openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { textVector, imageVector } from "./clip";
 import Board, { type BoardImage } from "./Board";
 import "./App.css";
@@ -25,6 +26,7 @@ interface Asset {
   thumb: string;
   colors: string[];
   missing: boolean;
+  favorite: boolean;
 }
 
 type Filter =
@@ -32,7 +34,8 @@ type Filter =
   | { kind: "tag"; value: string }
   | { kind: "folder"; value: string }
   | { kind: "color"; value: string }
-  | { kind: "missing" };
+  | { kind: "missing" }
+  | { kind: "favorite" };
 
 type SortKey = "time" | "name" | "size";
 
@@ -129,6 +132,7 @@ function Inspector({
   aiResult,
   onSimilar,
   onAddBoard,
+  onFav,
 }: {
   asset: Asset | null;
   onAddTag: (id: number, tag: string) => void;
@@ -138,6 +142,7 @@ function Inspector({
   aiResult: string;
   onSimilar: (id: number) => void;
   onAddBoard: (id: number) => void;
+  onFav: (id: number, fav: boolean) => void;
 }) {
   const [tagInput, setTagInput] = useState("");
   if (!asset) {
@@ -150,7 +155,16 @@ function Inspector({
   return (
     <section className="inspector">
       <img className="preview" src={convertFileSrc(asset.path)} alt={asset.name} />
-      <h3 title={asset.name}>{asset.name}</h3>
+      <h3 title={asset.name}>
+        <button
+          className={"fav-btn inline" + (asset.favorite ? " on" : "")}
+          title={asset.favorite ? "取消收藏" : "收藏"}
+          onClick={() => onFav(asset.id, !asset.favorite)}
+        >
+          ★
+        </button>{" "}
+        {asset.name}
+      </h3>
       <div className="dim">
         {asset.format} · {asset.width}×{asset.height} · {humanSize(asset.sizeBytes)}
       </div>
@@ -530,6 +544,9 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [boardImages, setBoardImages] = useState<BoardImage[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [resultLabel, setResultLabel] = useState("");
 
   function toBoardImg(a: Asset): BoardImage {
     return { id: a.id, path: a.thumb || a.path, name: a.name, width: a.width, height: a.height };
@@ -582,6 +599,71 @@ function App() {
       buildThumbs();
     })();
   }, [reload, buildThumbs]);
+
+  // 缩略图生成进度（后端事件）
+  useEffect(() => {
+    const un = listen<{ done: number; total: number }>("thumb-progress", (e) => {
+      const p = e.payload;
+      setProgress(p.done >= p.total ? null : p);
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  // 拖拽导入（Tauri 窗口级文件拖放）
+  useEffect(() => {
+    const un = getCurrentWebview().onDragDropEvent(async (event) => {
+      const t = event.payload.type;
+      if (t === "enter" || t === "over") setDragOver(true);
+      else if (t === "leave") setDragOver(false);
+      else if (t === "drop") {
+        setDragOver(false);
+        const paths = event.payload.paths;
+        if (!paths?.length) return;
+        try {
+          setBusy(true);
+          setStatus("正在导入拖入的素材…");
+          const added = await invoke<number>("import_paths", { paths });
+          await reload();
+          setStatus(`已导入 ${added} 张新素材`);
+          await buildThumbs();
+        } catch (err) {
+          setStatus(`导入失败：${err}`);
+        } finally {
+          setBusy(false);
+        }
+      }
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [reload, buildThumbs]);
+
+  async function toggleFavorite(id: number, fav: boolean) {
+    await invoke("set_favorite", { id, fav });
+    await reload();
+  }
+
+  async function findDups() {
+    try {
+      setBusy(true);
+      setStatus("视觉去重检测中…");
+      const groups = await invoke<number[][]>("find_duplicates", { threshold: 0.93 });
+      if (groups.length === 0) {
+        setStatus("未发现视觉近似的重复素材 ✓");
+        setSemanticIds(null);
+        return;
+      }
+      setSemanticIds(groups.flat());
+      setResultLabel(`🔁 重复项 · ${groups.length} 组`);
+      setStatus(`发现 ${groups.length} 组视觉近似素材`);
+    } catch (e) {
+      setStatus(`去重检测失败：${e}（先点「建索引」？）`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleImport() {
     try {
@@ -642,6 +724,7 @@ function App() {
       const vector = await textVector(q);
       const ids = await invoke<number[]>("clip_search", { vector, top: 80 });
       setSemanticIds(ids);
+      setResultLabel("✨ 语义结果");
       setStatus(`语义搜索：${ids.length} 个结果`);
     } catch (e) {
       setStatus(`语义搜索失败：${e}`);
@@ -656,6 +739,7 @@ function App() {
       setStatus("查找相似…");
       const ids = await invoke<number[]>("clip_similar", { id, top: 80 });
       setSemanticIds(ids);
+      setResultLabel("🔎 相似结果");
       setStatus(`找相似：${ids.length} 个结果`);
     } catch (e) {
       setStatus(`找相似失败：${e}（先点「建索引」？）`);
@@ -674,17 +758,21 @@ function App() {
         return;
       }
       let done = 0;
+      let seen = 0;
       for (const t of targets) {
         try {
           const vector = await imageVector(convertFileSrc(t.img));
           await invoke("set_clip_embedding", { id: t.id, vector });
           done++;
-          if (done % 5 === 0 || done === targets.length)
-            setStatus(`建立 CLIP 索引… ${done}/${targets.length}`);
         } catch {
           /* 跳过单张失败 */
         }
+        seen++;
+        setProgress({ done: seen, total: targets.length });
+        if (seen % 5 === 0 || seen === targets.length)
+          setStatus(`建立 CLIP 索引… ${seen}/${targets.length}`);
       }
+      setProgress(null);
       setStatus(`CLIP 索引完成：${done}/${targets.length}`);
     } catch (e) {
       setStatus(`建索引失败：${e}`);
@@ -781,6 +869,8 @@ function App() {
         return primaryBucket(a.colors) === filter.value;
       case "missing":
         return a.missing;
+      case "favorite":
+        return a.favorite;
     }
   };
   const matchesQuery = (a: Asset) =>
@@ -809,6 +899,8 @@ function App() {
       ? "全部素材"
       : filter.kind === "missing"
       ? "失效链接"
+      : filter.kind === "favorite"
+      ? "⭐ 收藏"
       : filter.kind === "tag"
       ? `标签：${filter.value}`
       : filter.kind === "folder"
@@ -886,6 +978,20 @@ function App() {
           )}
         </div>
 
+        <div className="nav-group">
+          <h4>智能合集</h4>
+          <div
+            className={"nav-item" + (isActive({ kind: "favorite" }) ? " active" : "")}
+            onClick={() => setFilter({ kind: "favorite" })}
+          >
+            ⭐ <span>收藏</span>
+            <span className="count">{assets.filter((a) => a.favorite).length}</span>
+          </div>
+          <div className="nav-item" onClick={findDups} title="基于 CLIP 向量检测视觉近似的重复素材">
+            🔁 <span>重复项（点击检测）</span>
+          </div>
+        </div>
+
         {folders.length > 0 && (
           <div className="nav-group">
             <h4>文件夹</h4>
@@ -934,10 +1040,18 @@ function App() {
       </aside>
 
       <main className="grid-wrap">
+        {progress && progress.total > 0 && (
+          <div className="prog-wrap" title={`处理中 ${progress.done}/${progress.total}`}>
+            <div
+              className="prog-fill"
+              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+            />
+          </div>
+        )}
         <div className="grid-head">
           <span>
             {semanticIds
-              ? `${searchMode === "semantic" ? "✨ 语义结果" : "🔎 相似结果"} · ${displayList.length} 项`
+              ? `${resultLabel || "结果"} · ${displayList.length} 项`
               : `${filterLabel} · ${displayList.length} 项`}
             {semanticIds && (
               <button className="btn link" onClick={() => setSemanticIds(null)}>
@@ -1013,6 +1127,16 @@ function App() {
               >
                 <div className="thumb">
                   {a.missing && <span className="badge-missing">⚠ 失效</span>}
+                  <button
+                    className={"fav-btn" + (a.favorite ? " on" : "")}
+                    title={a.favorite ? "取消收藏" : "收藏"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(a.id, !a.favorite);
+                    }}
+                  >
+                    ★
+                  </button>
                   <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
                 </div>
                 <div className="meta">
@@ -1042,11 +1166,18 @@ function App() {
         aiBusy={aiBusy}
         aiResult={aiResult}
         onSimilar={onSimilar}
+        onFav={toggleFavorite}
         onAddBoard={(id) => {
           const a = assets.find((x) => x.id === id);
           if (a) openBoardWith([a]);
         }}
       />
+
+      {dragOver && (
+        <div className="drop-overlay">
+          <div className="drop-hint">📥 松开导入素材（支持文件 / 文件夹）</div>
+        </div>
+      )}
 
       {boardOpen && (
         <Board

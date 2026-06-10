@@ -31,6 +31,8 @@ struct Asset {
     colors: Vec<String>,
     /// 原文件是否已失效（被移动/删除）
     missing: bool,
+    /// 是否收藏
+    favorite: bool,
 }
 
 const IMAGE_EXTS: &[&str] = &[
@@ -77,6 +79,7 @@ fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN caption TEXT", []);
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN embedding TEXT", []);
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN clip_embedding TEXT", []);
+    let _ = conn.execute("ALTER TABLE assets ADD COLUMN favorite INTEGER DEFAULT 0", []);
     Ok(conn)
 }
 
@@ -124,7 +127,7 @@ fn dominant_colors(img: &image::DynamicImage) -> Vec<String> {
 fn fetch_assets(conn: &Connection) -> Result<Vec<Asset>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id,path,name,format,width,height,size_bytes,folder,source,author,tags,added_at,thumb,colors
+            "SELECT id,path,name,format,width,height,size_bytes,folder,source,author,tags,added_at,thumb,colors,COALESCE(favorite,0)
              FROM assets ORDER BY added_at DESC, id DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -153,6 +156,7 @@ fn fetch_assets(conn: &Connection) -> Result<Vec<Asset>, String> {
                 thumb: row.get(12).unwrap_or_default(),
                 colors,
                 missing,
+                favorite: row.get::<_, i64>(14).unwrap_or(0) != 0,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -164,14 +168,11 @@ fn fetch_assets(conn: &Connection) -> Result<Vec<Asset>, String> {
     Ok(out)
 }
 
-/// 扫描文件夹（递归），把图片文件入库。返回本次新增数量。
-#[tauri::command]
-fn import_folder(app: tauri::AppHandle, path: String) -> Result<usize, String> {
-    let conn = open_db(&app)?;
-    let now = now_secs();
+/// 递归扫描一个路径（文件或文件夹），图片入库。返回新增数量。
+fn scan_path(conn: &Connection, path: &str, now: i64) -> Result<usize, String> {
     let mut added = 0usize;
 
-    for entry in WalkDir::new(&path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
         if !entry.file_type().is_file() {
             continue;
         }
@@ -227,6 +228,37 @@ fn import_folder(app: tauri::AppHandle, path: String) -> Result<usize, String> {
     }
 
     Ok(added)
+}
+
+/// 扫描文件夹（递归），把图片文件入库。返回本次新增数量。
+#[tauri::command]
+fn import_folder(app: tauri::AppHandle, path: String) -> Result<usize, String> {
+    let conn = open_db(&app)?;
+    scan_path(&conn, &path, now_secs())
+}
+
+/// 导入多个路径（拖拽进来的文件/文件夹）。返回新增数量。
+#[tauri::command]
+fn import_paths(app: tauri::AppHandle, paths: Vec<String>) -> Result<usize, String> {
+    let conn = open_db(&app)?;
+    let now = now_secs();
+    let mut added = 0usize;
+    for p in paths {
+        added += scan_path(&conn, &p, now)?;
+    }
+    Ok(added)
+}
+
+/// 收藏 / 取消收藏
+#[tauri::command]
+fn set_favorite(app: tauri::AppHandle, id: i64, fav: bool) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute(
+        "UPDATE assets SET favorite=?1 WHERE id=?2",
+        rusqlite::params![fav as i64, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// 返回库中所有素材
@@ -288,8 +320,17 @@ fn build_thumbnails(app: tauri::AppHandle) -> Result<usize, String> {
         rows.filter_map(|r| r.ok()).collect()
     };
 
+    let total = todo.len();
     let mut done = 0usize;
+    let mut seen = 0usize;
     for (id, path, thumb) in todo {
+        seen += 1;
+        if seen % 3 == 0 || seen == total {
+            let _ = app.emit(
+                "thumb-progress",
+                serde_json::json!({ "done": seen, "total": total }),
+            );
+        }
         let mut thumb_str = thumb.clone();
         // 优先用已有缩略图（小图、解码快）来算主色；没有则解码原图并生成缩略图
         let work: Option<image::DynamicImage> =
@@ -790,6 +831,46 @@ fn clip_similar(app: tauri::AppHandle, id: i64, top: usize) -> Result<Vec<i64>, 
     Ok(scored.into_iter().take(top.max(1)).map(|(id, _)| id).collect())
 }
 
+/// 视觉近似去重：基于 CLIP 向量找相似度 >= threshold 的组。返回每组的素材 id（组内按 id 升序，组按大小降序）。
+#[tauri::command]
+fn find_duplicates(app: tauri::AppHandle, threshold: Option<f32>) -> Result<Vec<Vec<i64>>, String> {
+    let th = threshold.unwrap_or(0.93);
+    let rows = load_clip(&app)?;
+    let n = rows.len();
+
+    // 并查集（n 上几千内 O(n²) 可接受；更大规模后续换近邻索引）
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn find_root(parent: &mut Vec<usize>, mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    for i in 0..n {
+        for j in (i + 1)..n {
+            if cosine(&rows[i].1, &rows[j].1) >= th {
+                let (ri, rj) = (find_root(&mut parent, i), find_root(&mut parent, j));
+                if ri != rj {
+                    parent[ri] = rj;
+                }
+            }
+        }
+    }
+
+    let mut groups: std::collections::HashMap<usize, Vec<i64>> = std::collections::HashMap::new();
+    for i in 0..n {
+        let r = find_root(&mut parent, i);
+        groups.entry(r).or_default().push(rows[i].0);
+    }
+    let mut out: Vec<Vec<i64>> = groups.into_values().filter(|g| g.len() >= 2).collect();
+    for g in out.iter_mut() {
+        g.sort();
+    }
+    out.sort_by(|a, b| b.len().cmp(&a.len()));
+    Ok(out)
+}
+
 // ===== 本地 AI 一键安装（检测 Ollama / 拉取模型带进度）=====
 
 fn ollama_host(app: &tauri::AppHandle) -> String {
@@ -950,7 +1031,10 @@ pub fn run() {
             clip_search,
             clip_similar,
             ai_status,
-            pull_model
+            pull_model,
+            import_paths,
+            set_favorite,
+            find_duplicates
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
