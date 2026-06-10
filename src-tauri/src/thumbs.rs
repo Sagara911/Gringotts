@@ -7,25 +7,66 @@ use tauri::Emitter;
 
 use crate::db::{open_db, thumbs_dir, VIDEO_FORMATS_SQL};
 
-/// 从图像中提取主色调（量化到 8 级/通道，取出现最多的几个桶）
+/// 从图像中提取主色调（量化到 8 级/通道，双轨选色）。
+/// 纯按像素数投票时，暗调图会被大面积深底霸榜，红发/烛光等小面积主题色进不了前五。
+/// 策略：前 2 个名额给"面积最大"的基调色（诚实反映底色），
+/// 后 3 个名额给"鲜艳度得分(∑饱和度×亮度)"最高的点缀色，且彼此去相近。
 fn dominant_colors(img: &image::DynamicImage) -> Vec<String> {
-    let small = img.thumbnail(48, 48).to_rgb8();
-    let mut counts: HashMap<(u8, u8, u8), u32> = HashMap::new();
+    let small = img.thumbnail(64, 64).to_rgb8();
+    // 桶 → (像素数, 鲜艳度累计)
+    let mut buckets: HashMap<(u8, u8, u8), (u32, f32)> = HashMap::new();
     for p in small.pixels() {
-        let key = (p[0] >> 5, p[1] >> 5, p[2] >> 5);
-        *counts.entry(key).or_insert(0) += 1;
+        let (r, g, b) = (p[0], p[1], p[2]);
+        let mx = r.max(g).max(b) as f32;
+        let mn = r.min(g).min(b) as f32;
+        let sat = if mx == 0.0 { 0.0 } else { (mx - mn) / mx };
+        let val = mx / 255.0;
+        let e = buckets.entry((r >> 5, g >> 5, b >> 5)).or_insert((0, 0.0));
+        e.0 += 1;
+        e.1 += sat * val;
     }
-    let mut v: Vec<((u8, u8, u8), u32)> = counts.into_iter().collect();
-    v.sort_by(|a, b| b.1.cmp(&a.1));
-    v.into_iter()
-        .take(5)
-        .map(|((r, g, b), _)| {
-            // 还原成桶中心代表色
-            let rr = (r << 5) | 16;
-            let gg = (g << 5) | 16;
-            let bb = (b << 5) | 16;
-            format!("#{:02x}{:02x}{:02x}", rr, gg, bb)
-        })
+
+    let center = |(r, g, b): (u8, u8, u8)| -> (i32, i32, i32) {
+        ((((r as i32) << 5) | 16), (((g as i32) << 5) | 16), (((b as i32) << 5) | 16))
+    };
+    let far = |out: &Vec<(i32, i32, i32)>, c: (i32, i32, i32)| {
+        out.iter()
+            .all(|(or, og, ob)| (c.0 - or).abs() + (c.1 - og).abs() + (c.2 - ob).abs() >= 64)
+    };
+
+    let mut out: Vec<(i32, i32, i32)> = Vec::new();
+
+    // 轨道一：面积最大的基调色，取 2 个
+    let mut by_count: Vec<_> = buckets.iter().collect();
+    by_count.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+    for (k, _) in by_count.iter() {
+        if out.len() >= 2 {
+            break;
+        }
+        let c = center(**k);
+        if far(&out, c) {
+            out.push(c);
+        }
+    }
+
+    // 轨道二：鲜艳度最高的点缀色，补满 5 个
+    let mut by_vib: Vec<_> = buckets.iter().collect();
+    by_vib.sort_by(|a, b| b.1 .1.partial_cmp(&a.1 .1).unwrap_or(std::cmp::Ordering::Equal));
+    for (k, (_, vib)) in by_vib.iter() {
+        if out.len() >= 5 {
+            break;
+        }
+        if *vib <= 0.5 {
+            break; // 鲜艳度太低就不硬凑
+        }
+        let c = center(**k);
+        if far(&out, c) {
+            out.push(c);
+        }
+    }
+
+    out.into_iter()
+        .map(|(r, g, b)| format!("#{:02x}{:02x}{:02x}", r, g, b))
         .collect()
 }
 
