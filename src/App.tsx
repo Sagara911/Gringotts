@@ -107,6 +107,28 @@ function App() {
     };
   }, [reload, buildThumbs]);
 
+  // MCP 本地接口（mcp_api.rs）触发的事件：智能体加图上画板 / 库被外部修改
+  const assetsRef = useRef<Asset[]>([]);
+  assetsRef.current = assets;
+  const openBoardWithRef = useRef<(l: Asset[]) => void>(() => {});
+  openBoardWithRef.current = openBoardWith;
+  useEffect(() => {
+    const un1 = listen<{ ids: number[] }>("mcp-add-to-board", (e) => {
+      const list = assetsRef.current.filter((a) => e.payload.ids.includes(a.id));
+      if (list.length) {
+        openBoardWithRef.current(list);
+        setStatus(`MCP：已把 ${list.length} 张素材加入画板`);
+      }
+    });
+    const un2 = listen("library-changed", async () => {
+      await reload();
+    });
+    return () => {
+      un1.then((f) => f());
+      un2.then((f) => f());
+    };
+  }, [reload]);
+
   useEffect(() => {
     const un = listen<{ done: number; total: number }>("thumb-progress", (e) => {
       const p = e.payload;
@@ -393,7 +415,7 @@ function App() {
   async function handleExport() {
     try {
       const path = await save({
-        defaultPath: "gringotts-metadata.json",
+        defaultPath: "nobi-metadata.json",
         filters: [
           { name: "JSON", extensions: ["json"] },
           { name: "CSV", extensions: ["csv"] },
@@ -412,6 +434,29 @@ function App() {
     await api.removeAsset(id);
     if (selectedId === id) setSelectedId(null);
     await reload();
+  }
+
+  /** 批量从库移除当前多选（不删原图） */
+  async function removeSelectedAction() {
+    const ids = Array.from(sel);
+    if (!ids.length) return;
+    const n = await api.removeAssets(ids);
+    setSel(new Set());
+    if (selectedId !== null && ids.includes(selectedId)) setSelectedId(null);
+    await reload();
+    setStatus(`已从库移除 ${n} 张（原图未动）`);
+  }
+
+  /** 整个文件夹从库移除（按父目录完整路径精确匹配，不删原文件） */
+  async function removeFolderAction(dirPath: string) {
+    const ids = assets.filter((a) => dirOf(a.path) === dirPath).map((a) => a.id);
+    if (!ids.length) return;
+    const n = await api.removeAssets(ids);
+    if (filter.kind === "folder" && filter.value === dirPath) setFilter({ kind: "all" });
+    setSel(new Set());
+    setSelectedId(null);
+    await reload();
+    setStatus(`已移除文件夹「${lastSeg(dirPath)}」的 ${n} 张素材（原文件未动）`);
   }
 
   async function toggleFavorite(id: number, fav: boolean) {
@@ -579,11 +624,42 @@ function App() {
     }
   }
 
+  async function exportMcpMenu() {
+    try {
+      const dir = await api.exportMcpScript();
+      await openPath(dir);
+      setStatus("MCP 脚本已导出并打开文件夹（注册命令见同目录 README）");
+    } catch (e) {
+      setStatus(`导出 MCP 脚本失败：${e}`);
+    }
+  }
+
   // ===== 派生数据 =====
+  // 文件夹按父目录完整路径区分（同名目录不串），显示用目录名，重名自动带上级消歧
+  const dirOf = (p: string) => p.replace(/[\\/][^\\/]+$/, "");
+  const lastSeg = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
   const folders = useMemo(() => {
     const m = new Map<string, number>();
-    for (const a of assets) if (a.folder) m.set(a.folder, (m.get(a.folder) ?? 0) + 1);
-    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+    for (const a of assets) {
+      const d = dirOf(a.path);
+      if (d) m.set(d, (m.get(d) ?? 0) + 1);
+    }
+    const nameCount = new Map<string, number>();
+    for (const k of m.keys()) {
+      const n = lastSeg(k);
+      nameCount.set(n, (nameCount.get(n) ?? 0) + 1);
+    }
+    return Array.from(m.entries())
+      .map(([key, count]) => {
+        const segs = key.split(/[\\/]/).filter(Boolean);
+        const name = segs[segs.length - 1] ?? key;
+        const label =
+          (nameCount.get(name) ?? 0) > 1 && segs.length > 1
+            ? `${name} · ${segs[segs.length - 2]}`
+            : name;
+        return { key, label, count };
+      })
+      .sort((a, b) => b.count - a.count);
   }, [assets]);
 
   const tags = useMemo(() => {
@@ -608,7 +684,7 @@ function App() {
       case "tag":
         return a.tags.some((t) => t === filter.value || t.startsWith(filter.value + "/"));
       case "folder":
-        return a.folder === filter.value;
+        return dirOf(a.path) === filter.value;
       case "color":
         return primaryBucket(a.colors) === filter.value;
       case "missing":
@@ -649,7 +725,7 @@ function App() {
       : filter.kind === "tag"
       ? `标签：${filter.value}`
       : filter.kind === "folder"
-      ? `文件夹：${filter.value}`
+      ? `文件夹：${lastSeg(filter.value)}`
       : `配色：${filter.value}`;
 
   // ===== 菜单 =====
@@ -679,6 +755,7 @@ function App() {
         { label: "Dobby 工具站", action: () => openUrl(DOBBY_URL) },
         { sep: true },
         { label: "导出浏览器采集插件…", action: exportExtMenu },
+        { label: "导出 MCP 接入脚本…", action: exportMcpMenu },
       ],
     },
     {
@@ -717,6 +794,7 @@ function App() {
     missingCount,
     findDups,
     folders,
+    removeFolder: removeFolderAction,
     colorCounts,
     tags,
     progress,
@@ -847,6 +925,17 @@ function App() {
               用 Dobby 处理
             </div>
             <div className="ctx-sep" />
+            {sel.size > 1 && sel.has(ctx.asset.id) && (
+              <div
+                className="ctx-item danger"
+                onClick={() => {
+                  removeSelectedAction();
+                  setCtx(null);
+                }}
+              >
+                从库移除选中的 {sel.size} 张（不删原图）
+              </div>
+            )}
             <div
               className="ctx-item danger"
               onClick={() => {

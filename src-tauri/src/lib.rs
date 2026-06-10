@@ -14,6 +14,7 @@ mod board;
 mod collect;
 mod db;
 mod library;
+mod mcp_api;
 mod search;
 mod settings;
 mod thumbs;
@@ -35,6 +36,8 @@ pub fn run() {
             library::list_assets,
             library::clear_assets,
             library::remove_asset,
+            library::remove_assets,
+            library::remove_folder,
             library::set_favorite,
             library::set_tags,
             library::add_tag_bulk,
@@ -63,10 +66,16 @@ pub fn run() {
             settings::get_settings,
             settings::set_settings,
             // board
+            board::list_boards,
+            board::create_board,
+            board::rename_board,
+            board::delete_board,
             board::save_board,
             board::load_board,
+            board::save_file,
             // collect
-            collect::export_extension
+            collect::export_extension,
+            collect::export_mcp_script
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

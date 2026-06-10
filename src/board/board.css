@@ -1,0 +1,478 @@
+/* 自研画板 UI —— 还原 tldraw 暗色风格 */
+
+.bd-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: #101011;
+  overflow: hidden;
+  outline: none;
+  user-select: none;
+}
+
+/* ---- 浮动面板通用质感 ---- */
+.bd-toolbar,
+.bd-zoom,
+.bd-styles,
+.bd-menu {
+  position: absolute;
+  background: #1d1d20;
+  border: 1px solid #2c2c31;
+  border-radius: 11px;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+/* ---- 底部工具栏 ---- */
+.bd-toolbar {
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+}
+.bd-toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: #2c2c31;
+  margin: 0 4px;
+}
+.bd-tool {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #cfcfd4;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+}
+.bd-tool:hover:not(:disabled) {
+  background: #29292e;
+}
+.bd-tool.active {
+  background: #2f80ed;
+  color: #fff;
+}
+.bd-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---- 左下缩放控件 ---- */
+.bd-zoom {
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  gap: 1px;
+}
+.bd-zoom .bd-tool {
+  width: 30px;
+  height: 30px;
+}
+.bd-zoom-pct {
+  min-width: 48px;
+  height: 30px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #cfcfd4;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.bd-zoom-pct:hover {
+  background: #29292e;
+}
+
+/* ---- 右上样式面板 ---- */
+.bd-styles {
+  top: 10px;
+  right: 10px;
+  padding: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 148px;
+}
+.bd-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+.bd-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09); /* 深色块在面板上仍可辨认 */
+}
+.bd-swatch.on {
+  box-shadow: 0 0 0 2px #1d1d20, 0 0 0 3.5px #2f80ed;
+}
+.bd-swatch-custom {
+  position: relative;
+  display: block;
+  background: conic-gradient(#e03131, #ffd43b, #40c057, #15aabf, #4f72fc, #ae3ec9, #e03131);
+  overflow: hidden;
+}
+.bd-swatch-custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.bd-row {
+  display: flex;
+  gap: 4px;
+}
+.bd-chip {
+  flex: 1;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: #29292e;
+  color: #cfcfd4;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.bd-chip:hover {
+  background: #333339;
+}
+.bd-chip.on {
+  background: #2f80ed;
+  color: #fff;
+}
+
+/* ---- 右键菜单 ---- */
+.bd-menu {
+  min-width: 168px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.bd-menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  border: none;
+  background: transparent;
+  color: #e3e3e8;
+  font-size: 12.5px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+}
+.bd-menu-item:hover:not(:disabled) {
+  background: #2f80ed;
+  color: #fff;
+}
+.bd-menu-item:hover:not(:disabled) kbd {
+  color: rgba(255, 255, 255, 0.75);
+}
+.bd-menu-item:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.bd-menu-item kbd {
+  font-family: inherit;
+  font-size: 11px;
+  color: #88888f;
+}
+.bd-menu-sep {
+  height: 1px;
+  background: #2c2c31;
+  margin: 4px 6px;
+}
+
+/* ---- 菜单内对齐/分布行 ---- */
+.bd-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 9px;
+}
+.bd-menu-row > span {
+  font-size: 11px;
+  color: #88888f;
+  margin-right: 3px;
+}
+.bd-mini {
+  min-width: 24px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: #29292e;
+  color: #cfcfd4;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.bd-mini:hover {
+  background: #2f80ed;
+  color: #fff;
+}
+.bd-mini.wide {
+  flex: 1;
+}
+
+/* ---- 画板切换器（左上） ---- */
+.bd-boards {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 6;
+}
+.bd-boards-cur {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #2c2c31;
+  border-radius: 9px;
+  background: #1d1d20;
+  color: #e3e3e8;
+  font-size: 12.5px;
+  cursor: pointer;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+}
+.bd-boards-cur:hover {
+  background: #29292e;
+}
+.bd-caret {
+  font-size: 10px;
+  color: #88888f;
+}
+.bd-boards-pop {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  min-width: 180px;
+  padding: 4px;
+  background: #1d1d20;
+  border: 1px solid #2c2c31;
+  border-radius: 11px;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.bd-boards-row {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+}
+.bd-boards-row:hover {
+  background: #29292e;
+}
+.bd-boards-row.on .bd-boards-name {
+  color: #4f8df7;
+}
+.bd-boards-name {
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: #e3e3e8;
+  font-size: 12.5px;
+  padding: 7px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bd-boards-act {
+  border: none;
+  background: transparent;
+  color: #88888f;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 5px;
+}
+.bd-boards-act:hover {
+  color: #fff;
+  background: #333339;
+}
+.bd-boards-new {
+  border: none;
+  background: transparent;
+  color: #4f8df7;
+  font-size: 12px;
+  padding: 7px 9px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 7px;
+}
+.bd-boards-new:hover {
+  background: #29292e;
+}
+.bd-boards-input {
+  margin: 2px;
+  padding: 5px 7px;
+  border: 1px solid #2f80ed;
+  border-radius: 6px;
+  background: #141416;
+  color: #e3e3e8;
+  font-size: 12.5px;
+  outline: none;
+}
+
+/* ---- 右下角帮助按钮（tldraw 风格） ---- */
+.bd-help {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #2c2c31;
+  background: #1d1d20;
+  color: #cfcfd4;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 6;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+}
+.bd-help:hover {
+  background: #29292e;
+}
+.bd-help.active {
+  background: #2f80ed;
+  color: #fff;
+  border-color: #2f80ed;
+}
+
+/* ---- 快捷键面板（停靠在帮助按钮上方） ---- */
+.bd-hotkeys {
+  position: absolute;
+  right: 12px;
+  bottom: 52px;
+  top: 56px;
+  width: 280px;
+  background: #1d1d20;
+  border: 1px solid #2c2c31;
+  border-radius: 11px;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+.bd-hotkeys-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #2c2c31;
+}
+.bd-hotkeys-head > span {
+  flex: 1;
+  font-size: 13px;
+  color: #e3e3e8;
+  font-weight: 600;
+}
+.bd-hotkeys-head .bd-chip {
+  flex: none;
+  padding: 0 8px;
+}
+.bd-hotkeys-head .bd-tool {
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+}
+.bd-hotkeys-msg {
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: #ff8787;
+}
+.bd-hotkeys-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+.bd-hotkeys-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 4px;
+}
+.bd-hotkeys-row > span {
+  font-size: 12px;
+  color: #cfcfd4;
+}
+.bd-hotkeys-key {
+  border: 1px solid #2c2c31;
+  border-radius: 6px;
+  background: #141416;
+  color: #e3e3e8;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  min-width: 64px;
+}
+.bd-hotkeys-key:hover {
+  border-color: #2f80ed;
+}
+.bd-hotkeys-key.capturing {
+  border-color: #2f80ed;
+  color: #4f8df7;
+}
+.bd-hotkeys-fixed {
+  font-size: 11px;
+  color: #88888f;
+  text-align: right;
+  max-width: 150px;
+}
+
+/* ---- 轻提示 ---- */
+.bd-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  background: #1d1d20;
+  border: 1px solid #2c2c31;
+  border-radius: 9px;
+  color: #e3e3e8;
+  font-size: 12px;
+  padding: 7px 14px;
+  z-index: 8;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+/* ---- 文本编辑覆盖层 ---- */
+.bd-text-editor::placeholder {
+  color: rgba(160, 160, 172, 0.45);
+}
+.bd-text-editor {
+  position: absolute;
+  z-index: 4;
+  background: transparent;
+  border: 1.5px dashed rgba(47, 128, 237, 0.6);
+  border-radius: 3px;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  caret-color: #2f80ed;
+}

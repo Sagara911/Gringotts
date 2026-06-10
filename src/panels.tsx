@@ -23,7 +23,8 @@ export interface DockState {
   isActive: (f: Filter) => boolean;
   missingCount: number;
   findDups: () => void;
-  folders: [string, number][];
+  folders: { key: string; label: string; count: number }[]; // key=父目录完整路径
+  removeFolder: (dirPath: string) => void;
   colorCounts: Map<string, number>;
   tags: [string, number][];
   progress: { done: number; total: number } | null;
@@ -73,6 +74,13 @@ const useDock = () => useContext(DockCtx)!;
 function LibraryPanel(_p: IDockviewPanelProps) {
   const d = useDock();
   const [allFolders, setAllFolders] = useState(false);
+  // 文件夹移除的两次确认：第一次点 ✕ 变成 ❗，2.5s 内再点才执行
+  const [pendingDel, setPendingDel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingDel) return;
+    const t = setTimeout(() => setPendingDel(null), 2500);
+    return () => clearTimeout(t);
+  }, [pendingDel]);
   const folderList = allFolders ? d.folders : d.folders.slice(0, FOLDER_CAP);
   const hiddenFolders = d.folders.length - folderList.length;
 
@@ -112,16 +120,36 @@ function LibraryPanel(_p: IDockviewPanelProps) {
 
       {d.folders.length > 0 && (
         <Section k="side-folders" title={`文件夹 · ${d.folders.length}`}>
-          {folderList.map(([name, count]) => (
+          {folderList.map((f) => (
             <div
-              key={name}
+              key={f.key}
               className={
-                "nav-item" + (d.isActive({ kind: "folder", value: name }) ? " active" : "")
+                "nav-item" + (d.isActive({ kind: "folder", value: f.key }) ? " active" : "")
               }
-              onClick={() => d.setFilter({ kind: "folder", value: name })}
+              title={f.key}
+              onClick={() => d.setFilter({ kind: "folder", value: f.key })}
             >
-              <span className="ellip">{name}</span>
-              <span className="count">{count}</span>
+              <span className="ellip">{f.label}</span>
+              <span className="count">{f.count}</span>
+              <button
+                className={"folder-del" + (pendingDel === f.key ? " confirm" : "")}
+                title={
+                  pendingDel === f.key
+                    ? "再点一次确认移除（不删原文件）"
+                    : "从库移除该文件夹（不删原文件）"
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (pendingDel === f.key) {
+                    setPendingDel(null);
+                    d.removeFolder(f.key);
+                  } else {
+                    setPendingDel(f.key);
+                  }
+                }}
+              >
+                {pendingDel === f.key ? "❗" : "✕"}
+              </button>
             </div>
           ))}
           {(hiddenFolders > 0 || allFolders) && d.folders.length > FOLDER_CAP && (

@@ -139,6 +139,33 @@ pub fn export_extension(app: tauri::AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().to_string())
 }
 
+/// 把内嵌的 MCP 接入脚本导出到应用数据目录，返回文件夹路径。
+/// 让安装版用户无需源码仓库即可把 Nobi 接入 Claude Code / Codex 等智能体。
+#[tauri::command]
+pub fn export_mcp_script(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("mcp");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let script = dir.join("nobi-mcp.mjs");
+    fs::write(&script, include_bytes!("../../scripts/nobi-mcp.mjs")).map_err(|e| e.to_string())?;
+    let script_path = script.to_string_lossy().replace('\\', "\\\\");
+    fs::write(
+        dir.join("README.md"),
+        format!(
+            "# 接入 Nobi MCP（需已安装 Node.js，且 Nobi 应用在运行）\n\n\
+             ## Claude Code\n```\nclaude mcp add nobi -- node \"{}\"\n```\n\n\
+             ## Codex CLI（~/.codex/config.toml）\n```toml\n[mcp_servers.nobi]\ncommand = \"node\"\nargs = [\"{}\"]\n```\n",
+            script.to_string_lossy(),
+            script_path
+        ),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
 /// 后台线程跑一个本地 HTTP 服务（127.0.0.1:21420），接收浏览器扩展的采集请求
 pub fn start_collect_server(app: tauri::AppHandle) {
     std::thread::spawn(move || {
@@ -175,6 +202,23 @@ pub fn start_collect_server(app: tauri::AppHandle) {
                     ),
                 };
                 let mut resp = tiny_http::Response::from_string(msg).with_status_code(code);
+                for h in cors() {
+                    resp = resp.with_header(h);
+                }
+                let _ = req.respond(resp);
+            } else if req.url().starts_with("/api/") {
+                // MCP 本地 API（见 mcp_api.rs；只回环可达）
+                let mut body = String::new();
+                let _ = req.as_reader().read_to_string(&mut body);
+                let method = req.method().to_string();
+                let url = req.url().to_string();
+                let (code, msg) = crate::mcp_api::handle_api(&app, &method, &url, &body);
+                let mut resp = tiny_http::Response::from_string(msg)
+                    .with_status_code(code)
+                    .with_header(
+                        tiny_http::Header::from_bytes("Content-Type", "application/json")
+                            .unwrap(),
+                    );
                 for h in cors() {
                     resp = resp.with_header(h);
                 }

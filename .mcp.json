@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "nobi": {
+      "command": "node",
+      "args": ["D:\\Game\\DB\\scripts\\nobi-mcp.mjs"]
+    }
+  }
+}

@@ -11,9 +11,17 @@ import type { AiCfg, AiCmd, AiStatus, Asset, ClipTarget } from "./types";
 export const listAssets = () => invoke<Asset[]>("list_assets");
 export const importFolder = (path: string) => invoke<number>("import_folder", { path });
 export const importPaths = (paths: string[]) => invoke<number>("import_paths", { paths });
+export interface ImportedBlob {
+  path: string;
+  name: string;
+  width: number;
+  height: number;
+}
 export const importBlob = (name: string, dataB64: string) =>
-  invoke<void>("import_blob", { name, dataB64 });
+  invoke<ImportedBlob>("import_blob", { name, dataB64 });
 export const removeAsset = (id: number) => invoke<void>("remove_asset", { id });
+export const removeAssets = (ids: number[]) => invoke<number>("remove_assets", { ids });
+export const removeFolder = (folder: string) => invoke<number>("remove_folder", { folder });
 export const setFavorite = (id: number, fav: boolean) =>
   invoke<void>("set_favorite", { id, fav });
 export const setTags = (id: number, tags: string[]) => invoke<void>("set_tags", { id, tags });
@@ -52,9 +60,23 @@ export const findDuplicates = (threshold = 0.93) =>
 export const getSettings = () => invoke<AiCfg>("get_settings");
 export const setSettings = (settings: AiCfg) => invoke<void>("set_settings", { settings });
 
-// ---- 画板（快照权威副本在 SQLite，tldraw 本地存储只是快取） ----
-export const saveBoard = (snapshot: string) => invoke<void>("save_board", { snapshot });
-export const loadBoard = () => invoke<string | null>("load_board");
+// ---- 画板（快照权威副本在 SQLite，localStorage 只是快取；多画板） ----
+export interface BoardMeta {
+  id: number;
+  name: string;
+  updated_at: number;
+}
+export const listBoards = () => invoke<BoardMeta[]>("list_boards");
+export const createBoard = (name: string) => invoke<number>("create_board", { name });
+export const renameBoard = (id: number, name: string) =>
+  invoke<void>("rename_board", { id, name });
+export const deleteBoard = (id: number) => invoke<void>("delete_board", { id });
+export const saveBoard = (id: number, snapshot: string) =>
+  invoke<void>("save_board", { id, snapshot });
+export const loadBoard = (id: number) => invoke<string | null>("load_board", { id });
+export const saveFile = (path: string, dataB64: string) =>
+  invoke<void>("save_file", { path, dataB64 });
 
-// ---- 采集 ----
+// ---- 采集 / 接入 ----
 export const exportExtension = () => invoke<string>("export_extension");
+export const exportMcpScript = () => invoke<string>("export_mcp_script");

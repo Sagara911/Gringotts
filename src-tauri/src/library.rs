@@ -91,9 +91,22 @@ pub fn import_paths(app: tauri::AppHandle, paths: Vec<String>) -> Result<usize, 
     Ok(added)
 }
 
-/// 导入拖入的文件内容（HTML5 拖放拿不到路径，按字节保存到 图片\Nobi\ 再入库）
+/// import_blob 的返回：落盘后的文件信息（画板贴图需要路径与尺寸）
+#[derive(serde::Serialize)]
+pub struct ImportedBlob {
+    pub path: String,
+    pub name: String,
+    pub width: i64,
+    pub height: i64,
+}
+
+/// 导入拖入/粘贴的文件内容（HTML5 拿不到路径，按字节保存到 图片\Nobi\ 再入库）
 #[tauri::command]
-pub fn import_blob(app: tauri::AppHandle, name: String, data_b64: String) -> Result<(), String> {
+pub fn import_blob(
+    app: tauri::AppHandle,
+    name: String,
+    data_b64: String,
+) -> Result<ImportedBlob, String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&data_b64)
         .map_err(|e| e.to_string())?;
@@ -168,7 +181,12 @@ pub fn import_blob(app: tauri::AppHandle, name: String, data_b64: String) -> Res
         ],
     )
     .map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(ImportedBlob {
+        path: path.to_string_lossy().to_string(),
+        name: fname,
+        width: w,
+        height: h,
+    })
 }
 
 /// 收藏 / 取消收藏
@@ -215,6 +233,48 @@ pub fn remove_asset(app: tauri::AppHandle, id: i64) -> Result<(), String> {
     conn.execute("DELETE FROM assets WHERE id=?1", rusqlite::params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// 批量从库移除（清缩略图缓存，**不动原图**）
+#[tauri::command]
+pub fn remove_assets(app: tauri::AppHandle, ids: Vec<i64>) -> Result<usize, String> {
+    let conn = open_db(&app)?;
+    let mut n = 0usize;
+    for id in ids {
+        if let Ok(thumb) = conn.query_row(
+            "SELECT COALESCE(thumb,'') FROM assets WHERE id=?1",
+            rusqlite::params![id],
+            |r| r.get::<_, String>(0),
+        ) {
+            if !thumb.is_empty() {
+                let _ = fs::remove_file(&thumb);
+            }
+        }
+        n += conn
+            .execute("DELETE FROM assets WHERE id=?1", rusqlite::params![id])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(n)
+}
+
+/// 把某个文件夹的素材整体从库移除（清缩略图缓存，**不动原文件**），返回移除数量
+#[tauri::command]
+pub fn remove_folder(app: tauri::AppHandle, folder: String) -> Result<usize, String> {
+    let conn = open_db(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT COALESCE(thumb,'') FROM assets WHERE folder=?1")
+        .map_err(|e| e.to_string())?;
+    let thumbs: Vec<String> = stmt
+        .query_map(rusqlite::params![folder], |r| r.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .filter(|t| !t.is_empty())
+        .collect();
+    for t in thumbs {
+        let _ = fs::remove_file(&t);
+    }
+    conn.execute("DELETE FROM assets WHERE folder=?1", rusqlite::params![folder])
+        .map_err(|e| e.to_string())
 }
 
 /// 覆盖设置某素材的标签

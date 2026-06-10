@@ -315,6 +315,23 @@ body {
 .nav-item.more-row { color: var(--text-3); font-size: 12px; }
 .nav-item.more-row:hover { color: var(--accent); background: transparent; }
 
+/* 文件夹行的"从库移除"按钮：悬停才显形，两次点击确认 */
+.folder-del {
+  display: none;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  margin-left: 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.nav-item:hover .folder-del { display: inline-block; }
+.folder-del:hover { color: #ff8787; }
+.folder-del.confirm { display: inline-block; color: #ff8787; }
+
 /* 卡片：无边框，纯图 + 文件名 */
 .card { cursor: pointer; }
 .card .thumb {
