@@ -253,9 +253,6 @@ body {
   padding-bottom: 20px;
 }
 
-/* 缩略图大小滑杆 */
-.zoom-range { width: 90px; accent-color: var(--accent); cursor: pointer; }
-
 /* 可折叠区块标题 */
 .sec-head { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 5px; }
 .sec-head:hover { color: var(--text-1); }

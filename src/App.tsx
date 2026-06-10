@@ -129,6 +129,24 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Ctrl+滚轮：网格上缩放图标（Windows 资源管理器式）；同时阻止 webview 页面缩放。
+  // 必须用原生非被动监听（React 的 onWheel 是 passive，无法 preventDefault）。
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if ((e.target as HTMLElement | null)?.closest?.(".grid-wrap")) {
+        setThumbSizeState((s) => {
+          const next = Math.min(320, Math.max(90, s + (e.deltaY < 0 ? 12 : -12)));
+          localStorage.setItem("thumb-size", String(next));
+          return next;
+        });
+      }
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
+
   // ===== 拖拽导入（HTML5：Tauri 拖放已关闭以便 dockview 面板可拖动）=====
   useEffect(() => {
     const isFileDrag = (e: DragEvent) => !!e.dataTransfer?.types?.includes("Files");

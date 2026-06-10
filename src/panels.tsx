@@ -183,16 +183,22 @@ function GridPanel(_p: IDockviewPanelProps) {
         </span>
         <span className="grid-head-right">
           <span className="status-text">{d.status}</span>
-          <input
-            type="range"
-            className="zoom-range"
-            title="缩略图大小"
-            min={110}
-            max={280}
-            step={10}
-            value={d.thumbSize}
+          <select
+            className="sort-select"
+            title="图标大小（也可 Ctrl+滚轮缩放）"
+            value={String(d.thumbSize)}
             onChange={(e) => d.setThumbSize(Number(e.target.value))}
-          />
+          >
+            {![110, 156, 200, 260].includes(d.thumbSize) && (
+              <option value={String(d.thumbSize)} disabled hidden>
+                {d.thumbSize}px
+              </option>
+            )}
+            <option value="110">小图标</option>
+            <option value="156">中图标</option>
+            <option value="200">大图标</option>
+            <option value="260">超大图标</option>
+          </select>
           <select
             className="sort-select"
             value={d.sortKey}
