@@ -591,6 +591,66 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+interface MenuItem {
+  label?: string;
+  action?: () => void;
+  sep?: boolean;
+}
+interface Menu {
+  title: string;
+  items: MenuItem[];
+}
+
+function MenuBar({ menus }: { menus: Menu[] }) {
+  const [open, setOpen] = useState<number | null>(null);
+  useEffect(() => {
+    if (open === null) return;
+    const close = () => setOpen(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+  return (
+    <div className="menubar">
+      {menus.map((m, i) => (
+        <div key={m.title} className="menu-wrap">
+          <div
+            className={"menubar-item" + (open === i ? " open" : "")}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(open === i ? null : i);
+            }}
+            onMouseEnter={() => {
+              if (open !== null) setOpen(i);
+            }}
+          >
+            {m.title}
+          </div>
+          {open === i && (
+            <div className="menu-drop" onClick={(e) => e.stopPropagation()}>
+              {m.items.map((it, j) =>
+                it.sep ? (
+                  <div key={j} className="ctx-sep" />
+                ) : (
+                  <div
+                    key={j}
+                    className="ctx-item"
+                    onClick={() => {
+                      setOpen(null);
+                      it.action?.();
+                    }}
+                  >
+                    {it.label}
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CmdManagerModal({
   cmds,
   onChanged,
@@ -1075,6 +1135,63 @@ function App() {
     : sorted;
   const selected = assets.find((a) => a.id === selectedId) ?? null;
 
+  async function exportExtMenu() {
+    try {
+      const dir = await invoke<string>("export_extension");
+      await openPath(dir);
+      setStatus("插件已导出并打开文件夹（浏览器扩展页「加载已解压」选它即可）");
+    } catch (e) {
+      setStatus(`导出插件失败：${e}`);
+    }
+  }
+
+  const menus: Menu[] = [
+    {
+      title: "文件(F)",
+      items: [
+        { label: "导入文件夹…", action: handleImport },
+        { sep: true },
+        { label: "导出元数据…", action: handleExport },
+      ],
+    },
+    {
+      title: "编辑(E)",
+      items: [
+        { label: "清除选择（Esc）", action: () => setSel(new Set()) },
+        { sep: true },
+        { label: "检测重复项", action: findDups },
+        { label: "建立语义索引", action: buildIndex },
+        { label: "重新生成缩略图", action: buildThumbs },
+      ],
+    },
+    {
+      title: "工具(T)",
+      items: [
+        { label: "参考板", action: () => openBoardWith([]) },
+        { label: "Dobby 工具站", action: () => openUrl(DOBBY_URL) },
+        { sep: true },
+        { label: "导出浏览器采集插件…", action: exportExtMenu },
+      ],
+    },
+    {
+      title: "AI",
+      items: [
+        { label: "AI 设置…", action: () => setShowSettings(true) },
+        { label: "自定义 AI 指令…", action: () => setShowCmdMgr(true) },
+      ],
+    },
+    {
+      title: "帮助(H)",
+      items: [
+        {
+          label: "GitHub 仓库",
+          action: () => openUrl("https://github.com/Sagara911/Gringotts"),
+        },
+        { label: "关于 Gringotts", action: () => setStatus("Gringotts v0.1.0 · 素材金库") },
+      ],
+    },
+  ];
+
   const isActive = (f: Filter) =>
     f.kind === filter.kind &&
     (f.kind === "all" || (f as any).value === (filter as any).value);
@@ -1095,9 +1212,8 @@ function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          Gringotts <small>素材金库</small>
-        </div>
+        <div className="brand">Gringotts</div>
+        <MenuBar menus={menus} />
         <div className="search">
           <span className="icon">🔍</span>
           <input
@@ -1125,20 +1241,8 @@ function App() {
             ✨ 语义
           </button>
         </div>
-        <button className="btn" onClick={() => openBoardWith([])} title="打开参考板（无限画布）">
-          参考板
-        </button>
-        <button className="btn" onClick={() => setShowSettings(true)} title="AI 设置（本地 / 云端 API）">
-          ⚙️
-        </button>
-        <button className="btn" onClick={buildIndex} disabled={busy} title="为素材建立语义索引（首次较慢）">
-          建索引
-        </button>
-        <button className="btn" onClick={handleExport} title="导出元数据（不锁定）">
-          导出
-        </button>
         <button className="btn primary" onClick={handleImport} disabled={busy}>
-          {busy ? "导入中…" : "导入文件夹"}
+          {busy ? "处理中…" : "导入文件夹"}
         </button>
       </header>
 
