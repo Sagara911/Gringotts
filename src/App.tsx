@@ -601,6 +601,18 @@ function App() {
     })();
   }, [reload, buildThumbs]);
 
+  // 浏览器扩展采集到新图 → 自动刷新
+  useEffect(() => {
+    const un = listen<{ name: string }>("collected", async (e) => {
+      setStatus(`🧲 已采集：${e.payload.name}`);
+      await reload();
+      buildThumbs();
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [reload, buildThumbs]);
+
   // 缩略图生成进度（后端事件）
   useEffect(() => {
     const un = listen<{ done: number; total: number }>("thumb-progress", (e) => {
