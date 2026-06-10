@@ -43,8 +43,8 @@
 
 ### 倒置风险监控点（发现即处理）
 1. **App.tsx 发胖**：超过 ~800 行 → 按功能切 hooks（useLibrary/useSearch/useAi…）。
-2. **画板数据在 tldraw 私有格式里**（已知地基漏洞）：参考板内容由 tldraw persistenceKey 存浏览器存储。
-   画板功能变重要后 → 把画板快照（editor.store.getSnapshot）定期写入我们的 SQLite。
+2. ~~**画板数据在 tldraw 私有格式里**~~ ✅ 已解决（2026-06）：快照防抖写入 SQLite `boards` 表（`board.rs` + `Board.tsx`）；
+   tldraw 本地存储降级为快取，本地为空而库有快照时自动恢复。
 3. **向量存 JSON 文本列**：万张级 → sqlite-vec/BLOB（已在下表）。
 4. **重计算漂进 UI 层**：CLIP 是唯一被允许的例外（有下沉路径）；新的重活一律 Rust，不许出现第二个例外。
 

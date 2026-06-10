@@ -52,5 +52,9 @@ export const findDuplicates = (threshold = 0.93) =>
 export const getSettings = () => invoke<AiCfg>("get_settings");
 export const setSettings = (settings: AiCfg) => invoke<void>("set_settings", { settings });
 
+// ---- 画板（快照权威副本在 SQLite，tldraw 本地存储只是快取） ----
+export const saveBoard = (snapshot: string) => invoke<void>("save_board", { snapshot });
+export const loadBoard = () => invoke<string | null>("load_board");
+
 // ---- 采集 ----
 export const exportExtension = () => invoke<string>("export_extension");

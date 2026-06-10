@@ -10,6 +10,7 @@
 //! - collect   浏览器采集（本地 HTTP 服务 + 扩展导出）
 
 mod ai;
+mod board;
 mod collect;
 mod db;
 mod library;
@@ -61,6 +62,9 @@ pub fn run() {
             // settings
             settings::get_settings,
             settings::set_settings,
+            // board
+            board::save_board,
+            board::load_board,
             // collect
             collect::export_extension
         ])

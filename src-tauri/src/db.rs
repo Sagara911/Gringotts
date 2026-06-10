@@ -78,6 +78,12 @@ pub fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             prompt TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS boards (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            snapshot TEXT,
+            updated_at INTEGER
         );",
     )
     .map_err(|e| e.to_string())?;
