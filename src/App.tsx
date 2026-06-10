@@ -4,6 +4,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl, openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { VirtuosoGrid } from "react-virtuoso";
 import { textVector, imageVector } from "./clip";
 import Board, { type BoardImage } from "./Board";
 import "./App.css";
@@ -1108,48 +1109,55 @@ function App() {
             </div>
           </div>
         ) : (
-          <div className="grid">
-            {displayList.map((a) => (
-              <div
-                key={a.id}
-                className={
-                  "card" +
-                  (a.id === selectedId ? " selected" : "") +
-                  (sel.has(a.id) ? " multi" : "")
-                }
-                onClick={(e) => onCardClick(e, a.id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setSelectedId(a.id);
-                  setAiResult("");
-                  setCtx({ x: e.clientX, y: e.clientY, asset: a });
-                }}
-              >
-                <div className="thumb">
-                  {a.missing && <span className="badge-missing">⚠ 失效</span>}
-                  <button
-                    className={"fav-btn" + (a.favorite ? " on" : "")}
-                    title={a.favorite ? "取消收藏" : "收藏"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(a.id, !a.favorite);
-                    }}
-                  >
-                    ★
-                  </button>
-                  <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
-                </div>
-                <div className="meta">
-                  <div className="name" title={a.name}>
-                    {a.name}
+          <VirtuosoGrid
+            className="grid-scroller"
+            totalCount={displayList.length}
+            listClassName="grid"
+            overscan={600}
+            itemContent={(i) => {
+              const a = displayList[i];
+              if (!a) return null;
+              return (
+                <div
+                  className={
+                    "card" +
+                    (a.id === selectedId ? " selected" : "") +
+                    (sel.has(a.id) ? " multi" : "")
+                  }
+                  onClick={(e) => onCardClick(e, a.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setSelectedId(a.id);
+                    setAiResult("");
+                    setCtx({ x: e.clientX, y: e.clientY, asset: a });
+                  }}
+                >
+                  <div className="thumb">
+                    {a.missing && <span className="badge-missing">⚠ 失效</span>}
+                    <button
+                      className={"fav-btn" + (a.favorite ? " on" : "")}
+                      title={a.favorite ? "取消收藏" : "收藏"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(a.id, !a.favorite);
+                      }}
+                    >
+                      ★
+                    </button>
+                    <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
                   </div>
-                  <div className="sub">
-                    {a.format} · {a.width}×{a.height}
+                  <div className="meta">
+                    <div className="name" title={a.name}>
+                      {a.name}
+                    </div>
+                    <div className="sub">
+                      {a.format} · {a.width}×{a.height}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              );
+            }}
+          />
         )}
         {assets.length > 0 && displayList.length === 0 && (
           <div className="empty">
