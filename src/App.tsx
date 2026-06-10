@@ -1210,7 +1210,6 @@ function App() {
                 onClick={() => setFilter({ kind: "color", value: c.key })}
               >
                 <span className="dot" style={{ background: c.hex }} />
-                {c.name}
               </div>
             ))}
           </div>
