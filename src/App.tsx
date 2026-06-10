@@ -738,6 +738,16 @@ function App() {
     onBoardMount,
     thumbSize,
     setThumbSize,
+    query,
+    setQuery,
+    searchMode,
+    toggleSearchMode: () => {
+      const next = searchMode === "semantic" ? "name" : "semantic";
+      setSearchMode(next);
+      if (next === "name") setSemanticIds(null);
+      else if (query.trim()) doSemantic(query);
+    },
+    doSemantic,
   };
 
   return (
@@ -746,33 +756,6 @@ function App() {
       <header className="topbar">
         <div className="brand">Gringotts</div>
         <MenuBar menus={menus} />
-        <div className="search">
-          <span className="icon">🔍</span>
-          <input
-            placeholder={
-              searchMode === "semantic"
-                ? '用大白话搜：例 "夜景里的红发女孩"（回车）'
-                : '搜索文件名 / 标签（例 "夜景" "厚涂"）'
-            }
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && searchMode === "semantic") doSemantic(query);
-            }}
-          />
-          <button
-            className={"mode-toggle" + (searchMode === "semantic" ? " on" : "")}
-            title="切换语义搜索（AI 理解大白话）"
-            onClick={() => {
-              const next = searchMode === "semantic" ? "name" : "semantic";
-              setSearchMode(next);
-              if (next === "name") setSemanticIds(null);
-              else if (query.trim()) doSemantic(query);
-            }}
-          >
-            ✨ 语义
-          </button>
-        </div>
         <button className="btn primary" onClick={handleImport} disabled={busy}>
           {busy ? "处理中…" : "导入文件夹"}
         </button>

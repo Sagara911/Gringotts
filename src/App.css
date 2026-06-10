@@ -253,6 +253,17 @@ body {
   padding-bottom: 20px;
 }
 
+/* 面板内搜索（素材面板顶部，宽度随面板自适应） */
+.panel-search { container-type: inline-size; margin-bottom: 10px; flex: 0 0 auto; }
+.panel-search .search { max-width: none; margin: 0; }
+@container (max-width: 320px) {
+  .panel-search .mt-text { display: none; }   /* 窄面板：语义开关缩成 ✨ 图标 */
+  .panel-search .search { padding-left: 10px; }
+}
+
+/* 顶栏主按钮靠右 */
+.topbar .btn.primary { margin-left: auto; }
+
 /* 可折叠区块标题 */
 .sec-head { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 5px; }
 .sec-head:hover { color: var(--text-1); }

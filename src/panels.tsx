@@ -60,6 +60,11 @@ export interface DockState {
   onBoardMount: (ed: BoardEditor) => void;
   thumbSize: number;
   setThumbSize: (n: number) => void;
+  query: string;
+  setQuery: (q: string) => void;
+  searchMode: "name" | "semantic";
+  toggleSearchMode: () => void;
+  doSemantic: (q: string) => void;
 }
 
 export const DockCtx = createContext<DockState | null>(null);
@@ -162,6 +167,28 @@ function GridPanel(_p: IDockviewPanelProps) {
       className="grid-wrap"
       style={{ ["--thumb-min" as string]: `${d.thumbSize}px` } as React.CSSProperties}
     >
+      <div className="panel-search">
+        <div className="search">
+          <span className="icon">🔍</span>
+          <input
+            placeholder={
+              d.searchMode === "semantic" ? '用大白话搜（回车）' : "搜索文件名 / 标签"
+            }
+            value={d.query}
+            onChange={(e) => d.setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && d.searchMode === "semantic") d.doSemantic(d.query);
+            }}
+          />
+          <button
+            className={"mode-toggle" + (d.searchMode === "semantic" ? " on" : "")}
+            title="切换语义搜索（AI 理解大白话）"
+            onClick={d.toggleSearchMode}
+          >
+            ✨<span className="mt-text"> 语义</span>
+          </button>
+        </div>
+      </div>
       {d.progress && d.progress.total > 0 && (
         <div className="prog-wrap" title={`处理中 ${d.progress.done}/${d.progress.total}`}>
           <div
