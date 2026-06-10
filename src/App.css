@@ -278,7 +278,13 @@ body {
 
 /* 极窄面板兜底：内容横向裁切而不是被挤成竖排单字 */
 .sidebar, .inspector { overflow-x: hidden; }
-.sidebar > *, .inspector > * { min-width: 150px; }
+
+/* 导航行：文字弹性收缩省略，计数永远完整（不出现半截数字） */
+.nav-item > span:not(.count):not(.chev) {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nav-item .count { flex-shrink: 0; }
 .inspector .empty { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .grid-head-right { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
 
