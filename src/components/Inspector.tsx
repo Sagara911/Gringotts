@@ -2,6 +2,7 @@ import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { AiCmd, Asset } from "../types";
 import { humanSize, isVideo } from "../utils";
+import Section from "./Section";
 
 export default function Inspector({
   asset,
@@ -59,8 +60,7 @@ export default function Inspector({
         {asset.format} · {asset.width}×{asset.height} · {humanSize(asset.sizeBytes)}
       </div>
 
-      <div className="section">
-        <h5>来源</h5>
+      <Section k="insp-source" title="来源" variant="insp">
         <div className="dim">
           {asset.source || "—"}
           {asset.author ? ` · 作者 ${asset.author}` : ""}
@@ -68,10 +68,9 @@ export default function Inspector({
         <div className="dim path" title={asset.path}>
           {asset.path}
         </div>
-      </div>
+      </Section>
 
-      <div className="section">
-        <h5>标签</h5>
+      <Section k="insp-tags" title="标签" variant="insp">
         <div className="tags">
           {asset.tags.map((t) => (
             <span className="tag removable" key={t} onClick={() => onRemoveTag(asset.id, t)}>
@@ -91,10 +90,9 @@ export default function Inspector({
             }
           }}
         />
-      </div>
+      </Section>
 
-      <div className="section">
-        <h5>配色</h5>
+      <Section k="insp-colors" title="配色" variant="insp">
         <div className="palette">
           {asset.colors.length === 0 ? (
             <span className="dim">—</span>
@@ -104,10 +102,9 @@ export default function Inspector({
             ))
           )}
         </div>
-      </div>
+      </Section>
 
-      <div className="section">
-        <h5>AI 操作</h5>
+      <Section k="insp-ai" title="AI 操作" variant="insp">
         <div className="ai-actions">
           <button className="ai-btn" disabled={!!aiBusy} onClick={() => onAi(asset.id, "prompt")}>
             {aiBusy === "prompt" ? "生成中…" : "反推绘画提示词"}
@@ -150,7 +147,7 @@ export default function Inspector({
             </button>
           </div>
         )}
-      </div>
+      </Section>
     </section>
   );
 }

@@ -51,6 +51,13 @@ function App() {
   const [dragOver, setDragOver] = useState(false);
   const [cmds, setCmds] = useState<AiCmd[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [thumbSize, setThumbSizeState] = useState<number>(() =>
+    Number(localStorage.getItem("thumb-size")) || 156
+  );
+  const setThumbSize = (n: number) => {
+    setThumbSizeState(n);
+    localStorage.setItem("thumb-size", String(n));
+  };
 
   // ===== 数据加载 =====
   const reload = useCallback(async () => {
@@ -711,6 +718,8 @@ function App() {
     aiRunCustom: aiRunCustomAction,
     openCmdMgr: () => setShowCmdMgr(true),
     onBoardMount,
+    thumbSize,
+    setThumbSize,
   };
 
   return (

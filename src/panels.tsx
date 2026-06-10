@@ -1,7 +1,7 @@
 // Dock 工作区面板（PS 式可拖拽）。
 // 面板通过 DockCtx 取 App 的状态与动作 —— 面板只负责展示与转发交互，不写业务逻辑。
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { VirtuosoGrid } from "react-virtuoso";
 import type { IDockviewPanelProps } from "dockview";
@@ -10,7 +10,11 @@ import type { AiCmd, Asset, Filter, SortKey } from "./types";
 import { COLOR_BUCKETS, isVideo } from "./utils";
 import Inspector from "./components/Inspector";
 import TagTree from "./components/TagTree";
+import Section from "./components/Section";
 import BoardCanvas, { type BoardEditor } from "./Board";
+
+/** 文件夹列表超过该数量时折叠显示 */
+const FOLDER_CAP = 8;
 
 export interface DockState {
   assets: Asset[];
@@ -54,6 +58,8 @@ export interface DockState {
   aiRunCustom: (id: number, cmd: AiCmd) => void;
   openCmdMgr: () => void;
   onBoardMount: (ed: BoardEditor) => void;
+  thumbSize: number;
+  setThumbSize: (n: number) => void;
 }
 
 export const DockCtx = createContext<DockState | null>(null);
@@ -61,10 +67,13 @@ const useDock = () => useContext(DockCtx)!;
 
 function LibraryPanel(_p: IDockviewPanelProps) {
   const d = useDock();
+  const [allFolders, setAllFolders] = useState(false);
+  const folderList = allFolders ? d.folders : d.folders.slice(0, FOLDER_CAP);
+  const hiddenFolders = d.folders.length - folderList.length;
+
   return (
     <aside className="sidebar">
       <div className="nav-group">
-        <h4>资料库</h4>
         <div
           className={"nav-item" + (d.isActive({ kind: "all" }) ? " active" : "")}
           onClick={() => d.setFilter({ kind: "all" })}
@@ -83,8 +92,7 @@ function LibraryPanel(_p: IDockviewPanelProps) {
         )}
       </div>
 
-      <div className="nav-group">
-        <h4>智能合集</h4>
+      <Section k="side-smart" title="智能合集">
         <div
           className={"nav-item" + (d.isActive({ kind: "favorite" }) ? " active" : "")}
           onClick={() => d.setFilter({ kind: "favorite" })}
@@ -95,12 +103,11 @@ function LibraryPanel(_p: IDockviewPanelProps) {
         <div className="nav-item" onClick={d.findDups} title="基于 CLIP 向量检测视觉近似的重复素材">
           <span>重复项</span>
         </div>
-      </div>
+      </Section>
 
       {d.folders.length > 0 && (
-        <div className="nav-group">
-          <h4>文件夹</h4>
-          {d.folders.map(([name, count]) => (
+        <Section k="side-folders" title={`文件夹 · ${d.folders.length}`}>
+          {folderList.map(([name, count]) => (
             <div
               key={name}
               className={
@@ -112,11 +119,15 @@ function LibraryPanel(_p: IDockviewPanelProps) {
               <span className="count">{count}</span>
             </div>
           ))}
-        </div>
+          {(hiddenFolders > 0 || allFolders) && d.folders.length > FOLDER_CAP && (
+            <div className="nav-item more-row" onClick={() => setAllFolders(!allFolders)}>
+              <span>{allFolders ? "收起" : `展开全部（还有 ${hiddenFolders} 个）`}</span>
+            </div>
+          )}
+        </Section>
       )}
 
-      <div className="nav-group">
-        <h4>配色</h4>
+      <Section k="side-colors" title="配色">
         <div className="color-grid">
           {COLOR_BUCKETS.map((c) => (
             <div
@@ -131,16 +142,15 @@ function LibraryPanel(_p: IDockviewPanelProps) {
             </div>
           ))}
         </div>
-      </div>
+      </Section>
 
-      <div className="nav-group">
-        <h4>标签</h4>
+      <Section k="side-tags" title={`标签 · ${d.tags.length}`}>
         <TagTree
           tags={d.tags}
           activeValue={d.filter.kind === "tag" ? d.filter.value : null}
           onPick={(v) => d.setFilter({ kind: "tag", value: v })}
         />
-      </div>
+      </Section>
     </aside>
   );
 }
@@ -148,7 +158,10 @@ function LibraryPanel(_p: IDockviewPanelProps) {
 function GridPanel(_p: IDockviewPanelProps) {
   const d = useDock();
   return (
-    <main className="grid-wrap">
+    <main
+      className="grid-wrap"
+      style={{ ["--thumb-min" as string]: `${d.thumbSize}px` } as React.CSSProperties}
+    >
       {d.progress && d.progress.total > 0 && (
         <div className="prog-wrap" title={`处理中 ${d.progress.done}/${d.progress.total}`}>
           <div
@@ -170,6 +183,16 @@ function GridPanel(_p: IDockviewPanelProps) {
         </span>
         <span className="grid-head-right">
           <span className="status-text">{d.status}</span>
+          <input
+            type="range"
+            className="zoom-range"
+            title="缩略图大小"
+            min={110}
+            max={280}
+            step={10}
+            value={d.thumbSize}
+            onChange={(e) => d.setThumbSize(Number(e.target.value))}
+          />
           <select
             className="sort-select"
             value={d.sortKey}
