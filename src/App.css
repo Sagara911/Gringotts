@@ -118,10 +118,13 @@ body {
   transition: background 0.15s;
 }
 .search:focus-within { background: var(--surface-3); }
+.search { min-width: 0; overflow: hidden; }
 .search input {
-  flex: 1; background: transparent; border: none; outline: none;
+  flex: 1; min-width: 0; background: transparent; border: none; outline: none;
   color: var(--text-1); font-size: 13px;
+  text-overflow: ellipsis;
 }
+.search input::placeholder { text-overflow: ellipsis; }
 .search input::placeholder { color: var(--text-3); }
 .search .icon { color: var(--text-3); margin-right: 8px; font-size: 12px; }
 
