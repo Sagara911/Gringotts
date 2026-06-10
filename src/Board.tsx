@@ -60,11 +60,17 @@ export function addImages(editor: Editor, images: BoardImage[]) {
   editor.zoomToFit();
 }
 
-/** 画板面板内容（tldraw 无限画布，内容自动保存） */
+/** 画板面板内容（tldraw 无限画布，内容自动保存，强制深色） */
 export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => void }) {
   return (
     <div className="board-canvas">
-      <Tldraw persistenceKey="gringotts-refboard" onMount={onMount} />
+      <Tldraw
+        persistenceKey="gringotts-refboard"
+        onMount={(editor) => {
+          editor.user.updateUserPreferences({ colorScheme: "dark" });
+          onMount(editor);
+        }}
+      />
     </div>
   );
 }
