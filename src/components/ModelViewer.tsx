@@ -39,17 +39,23 @@ export default function ModelViewer({
         if (!el) return;
         setStatus("加载模型…");
 
-        // preserveDrawingBuffer：截当前帧存封面要用
+        // preserveDrawingBuffer：截当前帧存封面要用。
+        // alpha:false + 实色背景：WebView2 下透明 canvas 有"截帧正常但屏幕全黑"的合成坑，不透明最稳
         const renderer = new THREE.WebGLRenderer({
           antialias: true,
-          alpha: true,
+          alpha: false,
           preserveDrawingBuffer: true,
         });
         renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
         renderer.setSize(el.clientWidth, el.clientHeight);
         el.appendChild(renderer.domElement);
+        renderer.domElement.addEventListener("webglcontextlost", (ev) => {
+          ev.preventDefault();
+          setStatus("WebGL 上下文丢失（显卡资源紧张）——关闭重开即可");
+        });
 
         const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x141417);
         const camera = new THREE.PerspectiveCamera(
           50,
           el.clientWidth / Math.max(1, el.clientHeight),
@@ -133,8 +139,13 @@ export default function ModelViewer({
 
         let raf = 0;
         const tick = () => {
-          controls.update();
-          renderer.render(scene, camera);
+          try {
+            controls.update();
+            renderer.render(scene, camera);
+          } catch (err) {
+            setStatus(`渲染中断：${err instanceof Error ? err.message : err}`);
+            return; // 出错就停循环，把原因亮出来
+          }
           raf = requestAnimationFrame(tick);
         };
         tick();
@@ -146,6 +157,10 @@ export default function ModelViewer({
           renderer.setSize(el.clientWidth, el.clientHeight);
         };
         window.addEventListener("resize", onResize);
+        // 挂载初期布局可能未稳（dock/浮层动画），下一帧再校正一次尺寸
+        requestAnimationFrame(() => {
+          if (!disposed) onResize();
+        });
 
         ctlRef.current = {
           reset,
