@@ -1,0 +1,51 @@
+# 自动发布：推送 v* 标签即触发——云端编译、签名、生成 latest.json、创建 GitHub Release。
+# 本地一键入口：node scripts/release.mjs <版本号>
+#
+# 前置（仓库 Settings → Secrets and variables → Actions 配置两个 secret）：
+#   TAURI_SIGNING_PRIVATE_KEY          —— 私钥文件内容（~/.tauri/nobi-updater.key）
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD —— 私钥密码
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # 创建 Release 需要
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Nobi ${{ github.ref_name }}"
+          releaseBody: |
+            ### 安装
+            下载 `nobi_x.x.x_x64-setup.exe` 双击安装（Windows 10/11 x64）。
+
+            已安装旧版本的用户会在应用内自动收到升级提示。
+            （`latest.json` 为自动更新清单，无需手动下载）
+          releaseDraft: false
+          prerelease: false
+          args: --bundles nsis

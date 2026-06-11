@@ -14,7 +14,24 @@
   私钥另有 GitHub 私有仓库备份，丢失本地副本时从私库恢复到上述路径即可。
   **丢钥或丢密码 = 已发布版本永远无法自动更新，只能重新分发。**
 
-## 发版六步
+## 自动发版（推荐，一条命令）
+
+前置（只需配一次）：仓库 Settings → Secrets and variables → Actions，添加两个 secret：
+- `TAURI_SIGNING_PRIVATE_KEY`：私钥文件内容（PowerShell 复制到剪贴板：
+  `Get-Content $env:USERPROFILE\.tauri\nobi-updater.key -Raw | Set-Clipboard`）
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码（问用户要）
+
+之后每次发版：
+
+```bash
+node scripts/release.mjs 0.1.2
+```
+
+脚本会改版本号、提交、打 v0.1.2 标签并推送；GitHub Actions
+（`.github/workflows/release.yml`）随即在云端编译、签名、生成 latest.json、
+创建 Release。约 10-15 分钟后用户自动收到更新。进度看仓库的 Actions 页。
+
+## 手动发版（备用，Actions 不可用时）
 
 ### 1. 改版本号
 
