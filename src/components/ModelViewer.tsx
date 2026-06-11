@@ -40,19 +40,26 @@ export default function ModelViewer({
         if (!el) return;
         setStatus("加载模型…");
 
-        // WebView2 黑屏三连坑，全部绕开：
-        // - antialias:false —— ANGLE 解析 MSAA 上屏在部分驱动黑屏（截帧正常、屏幕全黑的元凶）
-        // - preserveDrawingBuffer:false —— 不需要（截封面前手动 render 一帧即可），开着另有合成坑
-        // - alpha:false + 实色背景 —— 透明 canvas 合成坑
+        // WebView2 合成坑终极绕法：WebGL 画布【不上屏】（离屏渲染），每帧 drawImage 拷到
+        // 一块普通 2D 画布显示。实测该机型 GL 渲染/截帧全好、唯独合成上屏黑屏（GPU 渲染 ×
+        // 软件合成的错配）；2D 画布与画板(Konva)同一条合成路径，必通。不直接上屏后
+        // MSAA 抗锯齿也能放心开回来。
         const renderer = new THREE.WebGLRenderer({
-          antialias: false,
+          antialias: true,
           alpha: false,
           preserveDrawingBuffer: false,
           powerPreference: "high-performance",
         });
-        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+        renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
         renderer.setSize(el.clientWidth, el.clientHeight);
-        el.appendChild(renderer.domElement);
+        const out = document.createElement("canvas"); // 真正可见的 2D 画布
+        out.width = renderer.domElement.width;
+        out.height = renderer.domElement.height;
+        out.style.width = "100%";
+        out.style.height = "100%";
+        el.appendChild(out);
+        const octx = out.getContext("2d");
+        if (!octx) throw new Error("2D 画布创建失败");
         renderer.domElement.addEventListener("webglcontextlost", (ev) => {
           ev.preventDefault();
           setStatus("WebGL 上下文丢失（显卡资源紧张）——关闭重开即可");
@@ -83,7 +90,8 @@ export default function ModelViewer({
         rim.position.set(-4, 2, -3);
         scene.add(rim);
 
-        const controls = new OrbitControls(camera, renderer.domElement);
+        // 事件绑可见的 2D 画布（WebGL 画布已离屏收不到鼠标）
+        const controls = new OrbitControls(camera, out);
         controls.enableDamping = true;
         controls.autoRotate = true;
         controls.autoRotateSpeed = 2.2;
@@ -155,6 +163,8 @@ export default function ModelViewer({
           try {
             controls.update();
             renderer.render(scene, camera);
+            // 同一任务内立刻拷贝（无 preserveDrawingBuffer 也安全）
+            octx.drawImage(renderer.domElement, 0, 0);
           } catch (err) {
             setStatus(`渲染中断：${err instanceof Error ? err.message : err}`);
             return; // 出错就停循环，把原因亮出来
@@ -168,6 +178,8 @@ export default function ModelViewer({
           camera.aspect = el.clientWidth / el.clientHeight;
           camera.updateProjectionMatrix();
           renderer.setSize(el.clientWidth, el.clientHeight);
+          out.width = renderer.domElement.width;
+          out.height = renderer.domElement.height;
         };
         window.addEventListener("resize", onResize);
         // 挂载初期布局可能未稳（dock/浮层动画），下一帧再校正一次尺寸
@@ -206,7 +218,7 @@ export default function ModelViewer({
           controls.dispose();
           renderer.dispose();
           renderer.forceContextLoss();
-          renderer.domElement.remove();
+          out.remove();
         };
       } catch (e) {
         if (!disposed) setStatus(`加载失败：${e instanceof Error ? e.message : e}`);
