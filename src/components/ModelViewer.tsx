@@ -21,18 +21,22 @@ export default function ModelViewer({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState("加载 3D 引擎…");
   const [rotate, setRotate] = useState(true);
+  const [solid, setSolid] = useState(false);
   const [glInfo, setGlInfo] = useState(""); // 实际在跑的 GPU/渲染器，黑屏排查用
   const [compat, setCompat] = useState(false); // 兼容显示：用 <img> 元素逐帧贴图（显示层终极兜底）
   const compatApiRef = useRef<((on: boolean) => void) | null>(null);
   const ctlRef = useRef<{
     reset?: () => void;
     setRotate?: (v: boolean) => void;
+    setSolid?: (v: boolean) => void;
     snapshot?: () => string | null;
   }>({});
 
   useEffect(() => {
     let disposed = false;
     let cleanup = () => {};
+    setSolid(false);
+    setCompat(false);
     (async () => {
       try {
         const THREE = await import("three");
@@ -137,20 +141,24 @@ export default function ModelViewer({
         }
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x141417);
+        scene.background = new THREE.Color(0x181a20);
         const camera = new THREE.PerspectiveCamera(
           50,
           el.clientWidth / Math.max(1, el.clientHeight),
           0.01,
           1000
         );
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a45, 1.2));
-        const key = new THREE.DirectionalLight(0xffffff, 1.6);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a45, 1.7));
+        const key = new THREE.DirectionalLight(0xffffff, 2.4);
         key.position.set(3, 6, 4);
         scene.add(key);
-        const rim = new THREE.DirectionalLight(0x88a0ff, 0.5);
+        const rim = new THREE.DirectionalLight(0x9fb1ff, 0.8);
         rim.position.set(-4, 2, -3);
         scene.add(rim);
+        const head = new THREE.PointLight(0xffffff, 1.25);
+        camera.add(head);
+        scene.add(camera);
 
         // 事件绑可见的 2D 画布（WebGL 画布已离屏收不到鼠标）
         const controls = new OrbitControls(camera, out);
@@ -202,6 +210,54 @@ export default function ModelViewer({
           return;
         }
 
+        const originalMaterials = new Map<
+          import("three").Mesh,
+          import("three").Material | import("three").Material[]
+        >();
+        const clayMaterial = new THREE.MeshStandardMaterial({
+          color: 0xc4c9d4,
+          roughness: 0.68,
+          metalness: 0.03,
+          side: THREE.DoubleSide,
+        });
+        const materialList = (m: import("three").Material | import("three").Material[]) =>
+          Array.isArray(m) ? m : [m];
+        obj.traverse((c) => {
+          const mesh = c as import("three").Mesh;
+          if (!(mesh as { isMesh?: boolean }).isMesh || !mesh.material) return;
+          originalMaterials.set(mesh, mesh.material);
+          for (const mat of materialList(mesh.material)) {
+            mat.side = THREE.DoubleSide;
+            const maybe = mat as import("three").Material & {
+              opacity?: number;
+              transparent?: boolean;
+              color?: import("three").Color;
+              map?: unknown;
+            };
+            if (typeof maybe.opacity === "number" && maybe.opacity < 0.15) {
+              maybe.opacity = 1;
+              maybe.transparent = false;
+            } else if (maybe.opacity === 1 && maybe.transparent) {
+              maybe.transparent = false;
+            }
+            if (
+              maybe.color &&
+              !maybe.map &&
+              maybe.color.r + maybe.color.g + maybe.color.b < 0.18
+            ) {
+              maybe.color.set(0xb8bcc6);
+            }
+            mat.needsUpdate = true;
+          }
+        });
+        const applySolid = (on: boolean) => {
+          for (const [mesh, original] of originalMaterials) {
+            mesh.material = on ? clayMaterial : original;
+          }
+          setSolid(on);
+        };
+        if (fmt === "fbx") applySolid(true);
+
         // 居中 + 按包围球取景
         const box = new THREE.Box3().setFromObject(obj);
         const size = box.getSize(new THREE.Vector3());
@@ -251,6 +307,7 @@ export default function ModelViewer({
         ctlRef.current = {
           reset,
           setRotate: (v) => (controls.autoRotate = v),
+          setSolid: applySolid,
           snapshot: () => {
             renderer.render(scene, camera);
             const data = renderer.domElement.toDataURL("image/png");
@@ -277,6 +334,7 @@ export default function ModelViewer({
           cancelAnimationFrame(raf);
           window.removeEventListener("resize", onResize);
           controls.dispose();
+          clayMaterial.dispose();
           renderer.dispose();
           renderer.forceContextLoss();
           out.remove();
@@ -342,6 +400,13 @@ export default function ModelViewer({
               title="兼容显示：画面黑屏时切开——改用图片元素逐帧显示（慢些但保证可见）"
             >
               🛟 兼容
+            </button>
+            <button
+              className={"mv-tool" + (solid ? " on" : "")}
+              onClick={() => ctlRef.current.setSolid?.(!solid)}
+              title="实体显示：忽略原贴图/透明材质，用浅色双面材质看清轮廓"
+            >
+              ◩ 实体
             </button>
           </div>
           <div className="mv-title" title={asset.name}>
