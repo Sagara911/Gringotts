@@ -628,6 +628,24 @@ function App() {
     }
   }
 
+  // 画板「存成合集回库」：把画板上来自库的图按 assetId 攒成一个合集
+  async function saveBoardAsCollection(assetIds: number[]) {
+    if (!assetIds.length) {
+      setStatus("画板上没有来自素材库的图（外部拖入的图未入库）");
+      return;
+    }
+    const name = window.prompt(`把画板存成合集（${assetIds.length} 张），起个名字：`, "情绪板");
+    if (name == null || !name.trim()) return;
+    try {
+      const id = await api.createCollection(name.trim(), assetIds);
+      await loadCollections();
+      setStatus(`已把画板存成合集「${name.trim()}」（${assetIds.length} 张）`);
+      openCollection(id);
+    } catch (e) {
+      setStatus(`存成合集失败：${e}`);
+    }
+  }
+
   async function deleteCollectionAction(id: number) {
     try {
       await api.deleteCollection(id);
@@ -955,6 +973,7 @@ function App() {
     createCollectionFromSel,
     addSelToCollection,
     deleteCollection: deleteCollectionAction,
+    saveBoardAsCollection,
     thumbSize,
     setThumbSize,
     query,

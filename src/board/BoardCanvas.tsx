@@ -486,10 +486,13 @@ let boardClipboard: BoardShape[] = [];
 export default function BoardCanvas({
   onMount,
   onFindSimilar,
+  onSaveAsCollection,
 }: {
   onMount: (editor: Editor) => void;
   /** 画板图片右键"找库里相似图"：把来源 assetId 抛回 App 调 clip_similar */
   onFindSimilar?: (assetId: number) => void;
+  /** 把画板上来自库的图（assetId）存成一个合集回库 */
+  onSaveAsCollection?: (assetIds: number[]) => void;
 }) {
   const editorRef = useRef<Editor | null>(null);
   if (!editorRef.current) editorRef.current = new Editor();
@@ -2170,6 +2173,22 @@ export default function BoardCanvas({
               ["置于底层", "Shift+[", selection.length > 0, () => store.reorder([...selection], "back")],
               null,
               [`导出 PNG${selection.length ? "（选区）" : "（全部）"}`, "", store.shapes.length > 0, () => void exportPng()],
+              ...(onSaveAsCollection
+                ? [[
+                    "存成合集回库", "",
+                    store.shapes.some((s) => s.type === "image" && s.assetId != null),
+                    () => {
+                      const ids = [
+                        ...new Set(
+                          store.shapes
+                            .filter((s): s is ImageShape => s.type === "image" && s.assetId != null)
+                            .map((s) => s.assetId!)
+                        ),
+                      ];
+                      onSaveAsCollection(ids);
+                    },
+                  ] as [string, string, boolean, () => void]]
+                : []),
               [`对齐吸附${snapOn ? "（开）" : "（关）"}`, bindings["view.snap"], true, () => {
                 setSnapOn((v) => !v);
                 showToast(`对齐吸附 ${snapOn ? "已关闭" : "已开启"}`);

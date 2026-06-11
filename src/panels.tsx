@@ -66,6 +66,7 @@ export interface DockState {
   createCollectionFromSel: () => void;
   addSelToCollection: (id: number) => void;
   deleteCollection: (id: number) => void;
+  saveBoardAsCollection: (assetIds: number[]) => void;
   thumbSize: number;
   setThumbSize: (n: number) => void;
   query: string;
@@ -470,7 +471,13 @@ function InspectorPanel(_p: IDockviewPanelProps) {
 
 function BoardPanel(_p: IDockviewPanelProps) {
   const d = useDock();
-  return <BoardCanvas onMount={d.onBoardMount} onFindSimilar={d.findSimilarFromBoard} />;
+  return (
+    <BoardCanvas
+      onMount={d.onBoardMount}
+      onFindSimilar={d.findSimilarFromBoard}
+      onSaveAsCollection={d.saveBoardAsCollection}
+    />
+  );
 }
 
 export const DOCK_COMPONENTS = {
