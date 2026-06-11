@@ -50,7 +50,7 @@ export default function ModelViewer({
           preserveDrawingBuffer: false,
           powerPreference: "high-performance",
         });
-        renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
+        renderer.setPixelRatio(1); // 每帧读回像素，1x 控带宽足够看模型
         renderer.setSize(el.clientWidth, el.clientHeight);
         const out = document.createElement("canvas"); // 真正可见的 2D 画布
         out.width = renderer.domElement.width;
@@ -60,6 +60,34 @@ export default function ModelViewer({
         el.appendChild(out);
         const octx = out.getContext("2d");
         if (!octx) throw new Error("2D 画布创建失败");
+
+        // 该机型连 drawImage(GL画布) 都走坏掉的 GPU 纹理通道（拷出透明）。
+        // 唯一实证可用的是"逐像素读回"（封面 toDataURL 一直正常），所以每帧
+        // readPixels → 翻转Y → putImageData。1x 像素比下带宽完全可接受。
+        const glc = renderer.getContext();
+        let fw = 0;
+        let fh = 0;
+        let readBuf = new Uint8Array(0);
+        let imgData: ImageData | null = null;
+        const realloc = () => {
+          fw = renderer.domElement.width;
+          fh = renderer.domElement.height;
+          out.width = fw;
+          out.height = fh;
+          readBuf = new Uint8Array(fw * fh * 4);
+          imgData = new ImageData(fw, fh);
+        };
+        realloc();
+        const blit = () => {
+          if (!imgData || !fw || !fh) return;
+          glc.readPixels(0, 0, fw, fh, glc.RGBA, glc.UNSIGNED_BYTE, readBuf);
+          const row = fw * 4;
+          for (let y = 0; y < fh; y++) {
+            // readPixels 自下而上，画布自上而下：逐行翻转
+            imgData.data.set(readBuf.subarray((fh - 1 - y) * row, (fh - y) * row), y * row);
+          }
+          octx.putImageData(imgData, 0, 0);
+        };
         renderer.domElement.addEventListener("webglcontextlost", (ev) => {
           ev.preventDefault();
           setStatus("WebGL 上下文丢失（显卡资源紧张）——关闭重开即可");
@@ -163,8 +191,8 @@ export default function ModelViewer({
           try {
             controls.update();
             renderer.render(scene, camera);
-            // 同一任务内立刻拷贝（无 preserveDrawingBuffer 也安全）
-            octx.drawImage(renderer.domElement, 0, 0);
+            // 同一任务内立刻读回（无 preserveDrawingBuffer 也安全）
+            blit();
           } catch (err) {
             setStatus(`渲染中断：${err instanceof Error ? err.message : err}`);
             return; // 出错就停循环，把原因亮出来
@@ -178,8 +206,7 @@ export default function ModelViewer({
           camera.aspect = el.clientWidth / el.clientHeight;
           camera.updateProjectionMatrix();
           renderer.setSize(el.clientWidth, el.clientHeight);
-          out.width = renderer.domElement.width;
-          out.height = renderer.domElement.height;
+          realloc();
         };
         window.addEventListener("resize", onResize);
         // 挂载初期布局可能未稳（dock/浮层动画），下一帧再校正一次尺寸
