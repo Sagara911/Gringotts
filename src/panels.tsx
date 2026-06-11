@@ -6,7 +6,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { VirtuosoGrid } from "react-virtuoso";
 import type { IDockviewPanelProps } from "dockview";
 
-import type { AiCmd, Asset, Filter, SortKey } from "./types";
+import type { AiCmd, Asset, Collection, Filter, SortKey } from "./types";
 import { COLOR_BUCKETS, isVideo } from "./utils";
 import Inspector from "./components/Inspector";
 import TagTree from "./components/TagTree";
@@ -61,6 +61,11 @@ export interface DockState {
   openCmdMgr: () => void;
   onBoardMount: (ed: BoardEditor) => void;
   findSimilarFromBoard: (assetId: number) => void;
+  collections: Collection[];
+  openCollection: (id: number) => void;
+  createCollectionFromSel: () => void;
+  addSelToCollection: (id: number) => void;
+  deleteCollection: (id: number) => void;
   thumbSize: number;
   setThumbSize: (n: number) => void;
   query: string;
@@ -119,6 +124,36 @@ function LibraryPanel(_p: IDockviewPanelProps) {
           <span>重复项</span>
         </div>
       </Section>
+
+      {d.collections.length > 0 && (
+        <Section k="side-collections" title={`合集 · ${d.collections.length}`}>
+          {d.collections.map((c) => (
+            <div
+              key={c.id}
+              className={
+                "nav-item" +
+                (d.isActive({ kind: "collection", value: String(c.id) }) ? " active" : "")
+              }
+              title={c.name}
+              onClick={() => d.openCollection(c.id)}
+            >
+              <span className="ellip">{c.name}</span>
+              <span className="count">{c.count}</span>
+              <button
+                className="folder-del"
+                title="删除合集（不删素材）"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`删除合集「${c.name}」？只解散分组，不删素材。`))
+                    d.deleteCollection(c.id);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </Section>
+      )}
 
       {d.folders.length > 0 && (
         <Section k="side-folders" title={`文件夹 · ${d.folders.length}`}>
@@ -311,6 +346,26 @@ function GridPanel(p: IDockviewPanelProps) {
           >
             加入画板
           </button>
+          <button className="btn" onClick={d.createCollectionFromSel}>
+            存为合集
+          </button>
+          {d.collections.length > 0 && (
+            <select
+              className="cfg-input"
+              value=""
+              onChange={(e) => {
+                if (e.target.value) d.addSelToCollection(Number(e.target.value));
+              }}
+              title="加入已有合集"
+            >
+              <option value="">加入合集…</option>
+              {d.collections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button className="btn" onClick={() => d.setSel(new Set())}>
             清除选择
           </button>

@@ -84,6 +84,17 @@ pub fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
             name TEXT,
             snapshot TEXT,
             updated_at INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS collections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS collection_items (
+            collection_id INTEGER NOT NULL,
+            asset_id INTEGER NOT NULL,
+            added_at INTEGER,
+            PRIMARY KEY (collection_id, asset_id)
         );",
     )
     .map_err(|e| e.to_string())?;

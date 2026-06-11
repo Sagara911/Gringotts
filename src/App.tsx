@@ -18,7 +18,7 @@ import {
 } from "dockview";
 import "dockview/dist/styles/dockview.css";
 
-import type { AiCmd, Asset, Filter, Menu, SortKey } from "./types";
+import type { AiCmd, Asset, Collection, Filter, Menu, SortKey } from "./types";
 import { DOBBY_URL, REPO_URL, primaryBucket } from "./utils";
 import * as api from "./api";
 import { imageVector, textVector } from "./clip";
@@ -50,6 +50,9 @@ function App() {
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [ctx, setCtx] = useState<{ x: number; y: number; asset: Asset } | null>(null);
   const [viewer, setViewer] = useState<{ list: Asset[]; index: number } | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  // 当前合集筛选下的成员 id（filter.kind==="collection" 时由 matchesFilter 用）
+  const [collectionMembers, setCollectionMembers] = useState<Set<number>>(new Set());
   const [searchMode, setSearchMode] = useState<"name" | "semantic">("name");
   const [semanticIds, setSemanticIds] = useState<number[] | null>(null);
   const [resultLabel, setResultLabel] = useState("");
@@ -94,13 +97,22 @@ function App() {
     }
   }, []);
 
+  const loadCollections = useCallback(async () => {
+    try {
+      setCollections(await api.listCollections());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       await reload();
       loadCmds();
+      loadCollections();
       buildThumbs();
     })();
-  }, [reload, buildThumbs, loadCmds]);
+  }, [reload, buildThumbs, loadCmds, loadCollections]);
 
   // ===== 后端事件 =====
   useEffect(() => {
@@ -576,6 +588,60 @@ function App() {
     onSimilar(assetId);
   }
 
+  // ===== 合集 =====
+  async function openCollection(id: number) {
+    try {
+      const ids = await api.collectionAssetIds(id);
+      setCollectionMembers(new Set(ids));
+      setSemanticIds(null);
+      setFilter({ kind: "collection", value: String(id) });
+    } catch (e) {
+      setStatus(`打开合集失败：${e}`);
+    }
+  }
+
+  async function createCollectionFromSel() {
+    const ids = Array.from(sel);
+    if (!ids.length) return;
+    const name = window.prompt(`新建合集（${ids.length} 张），起个名字：`, "");
+    if (name == null || !name.trim()) return;
+    try {
+      const id = await api.createCollection(name.trim(), ids);
+      await loadCollections();
+      setStatus(`已建合集「${name.trim()}」（${ids.length} 张）`);
+      openCollection(id);
+    } catch (e) {
+      setStatus(`建合集失败：${e}`);
+    }
+  }
+
+  async function addSelToCollection(id: number) {
+    const ids = Array.from(sel);
+    if (!ids.length) return;
+    try {
+      const n = await api.addToCollection(id, ids);
+      await loadCollections();
+      if (filter.kind === "collection" && filter.value === String(id)) openCollection(id);
+      setStatus(`已加入合集：新增 ${n} 张`);
+    } catch (e) {
+      setStatus(`加入合集失败：${e}`);
+    }
+  }
+
+  async function deleteCollectionAction(id: number) {
+    try {
+      await api.deleteCollection(id);
+      await loadCollections();
+      if (filter.kind === "collection" && filter.value === String(id)) {
+        setFilter({ kind: "all" });
+        setCollectionMembers(new Set());
+      }
+      setStatus("已删除合集（不删素材）");
+    } catch (e) {
+      setStatus(`删除合集失败：${e}`);
+    }
+  }
+
   async function buildIndex() {
     try {
       setBusy(true);
@@ -727,6 +793,8 @@ function App() {
         return dirOf(a.path) === filter.value;
       case "color":
         return primaryBucket(a.colors) === filter.value;
+      case "collection":
+        return collectionMembers.has(a.id);
       case "missing":
         return a.missing;
       case "favorite":
@@ -774,6 +842,8 @@ function App() {
       ? `标签：${filter.value}`
       : filter.kind === "folder"
       ? `文件夹：${lastSeg(filter.value)}`
+      : filter.kind === "collection"
+      ? `合集：${collections.find((c) => String(c.id) === filter.value)?.name ?? filter.value}`
       : `配色：${filter.value}`;
 
   // ===== 菜单 =====
@@ -880,6 +950,11 @@ function App() {
     openCmdMgr: () => setShowCmdMgr(true),
     onBoardMount,
     findSimilarFromBoard,
+    collections,
+    openCollection,
+    createCollectionFromSel,
+    addSelToCollection,
+    deleteCollection: deleteCollectionAction,
     thumbSize,
     setThumbSize,
     query,

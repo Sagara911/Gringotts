@@ -7,11 +7,13 @@
 //! - ai        视觉 AI（打标/提示词/分析/自定义指令/Ollama 管理）
 //! - search    检索（CLIP 存取与相似度 / 文本嵌入备用链路）
 //! - settings  Provider 配置（用户设置 > 环境变量 > 默认值）
+//! - collections 合集（手攒的具名素材集合；画板可存回库）
 //! - collect   浏览器采集（本地 HTTP 服务 + 扩展导出）
 
 mod ai;
 mod board;
 mod collect;
+mod collections;
 mod db;
 mod library;
 mod mcp_api;
@@ -75,6 +77,14 @@ pub fn run() {
             board::save_board,
             board::load_board,
             board::save_file,
+            // collections
+            collections::list_collections,
+            collections::create_collection,
+            collections::add_to_collection,
+            collections::remove_from_collection,
+            collections::delete_collection,
+            collections::rename_collection,
+            collections::collection_asset_ids,
             // collect
             collect::export_extension,
             collect::export_mcp_script

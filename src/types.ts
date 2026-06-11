@@ -24,8 +24,16 @@ export type Filter =
   | { kind: "tag"; value: string }
   | { kind: "folder"; value: string }
   | { kind: "color"; value: string }
+  | { kind: "collection"; value: string } // value = 合集 id（字符串）
   | { kind: "missing" }
   | { kind: "favorite" };
+
+export interface Collection {
+  id: number;
+  name: string;
+  count: number;
+  createdAt: number;
+}
 
 export type SortKey = "time" | "name" | "size";
 

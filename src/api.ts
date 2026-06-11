@@ -5,7 +5,7 @@
 // ============================================================
 
 import { invoke } from "@tauri-apps/api/core";
-import type { AiCfg, AiCmd, AiStatus, Asset, ClipTarget } from "./types";
+import type { AiCfg, AiCmd, AiStatus, Asset, ClipTarget, Collection } from "./types";
 
 // ---- 素材库 ----
 export const listAssets = () => invoke<Asset[]>("list_assets");
@@ -55,6 +55,20 @@ export const clipSimilar = (id: number, top: number) =>
   invoke<number[]>("clip_similar", { id, top });
 export const findDuplicates = (threshold = 0.93) =>
   invoke<number[][]>("find_duplicates", { threshold });
+
+// ---- 合集 ----
+export const listCollections = () => invoke<Collection[]>("list_collections");
+export const createCollection = (name: string, assetIds: number[]) =>
+  invoke<number>("create_collection", { name, assetIds });
+export const addToCollection = (id: number, assetIds: number[]) =>
+  invoke<number>("add_to_collection", { id, assetIds });
+export const removeFromCollection = (id: number, assetIds: number[]) =>
+  invoke<void>("remove_from_collection", { id, assetIds });
+export const deleteCollection = (id: number) => invoke<void>("delete_collection", { id });
+export const renameCollection = (id: number, name: string) =>
+  invoke<void>("rename_collection", { id, name });
+export const collectionAssetIds = (id: number) =>
+  invoke<number[]>("collection_asset_ids", { id });
 
 // ---- 设置 ----
 export const getSettings = () => invoke<AiCfg>("get_settings");
