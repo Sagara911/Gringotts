@@ -1,0 +1,194 @@
+/* 看图 / 练习全屏浮层样式（自包含，iv- 前缀避免与全局冲突） */
+.iv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: rgba(8, 8, 10, 0.92);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.iv-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 顶栏 */
+.iv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(20, 20, 24, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.iv-group {
+  display: flex;
+  gap: 6px;
+}
+.iv-tool,
+.iv-chip {
+  background: #2a2a30;
+  color: #e7e7ea;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.iv-tool:hover,
+.iv-chip:hover {
+  background: #34343c;
+}
+.iv-tool.on,
+.iv-chip.on {
+  background: #3b6fe0;
+  border-color: #5a86f0;
+  color: #fff;
+}
+.iv-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.iv-title {
+  flex: 1;
+  text-align: center;
+  color: #d6d6db;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iv-sub {
+  color: #8a8a92;
+  margin-left: 10px;
+  font-size: 12px;
+}
+.iv-close {
+  background: transparent;
+  color: #c4c4c9;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.iv-close:hover {
+  background: #3a2a2a;
+  color: #ff9b9b;
+}
+
+/* 中央图区 */
+.iv-canvas {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+.iv-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.iv-img.picking {
+  cursor: crosshair;
+}
+.iv-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 64px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  border: none;
+  font-size: 34px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+  opacity: 0.5;
+  transition: opacity 0.12s;
+}
+.iv-nav:hover {
+  opacity: 1;
+}
+.iv-nav.left {
+  left: 10px;
+}
+.iv-nav.right {
+  right: 10px;
+}
+.iv-toast {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* 底栏 */
+.iv-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 14px;
+  background: rgba(20, 20, 24, 0.9);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.iv-timer,
+.iv-palette {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.iv-palette {
+  flex: 1;
+  justify-content: flex-end;
+}
+.iv-label {
+  color: #8a8a92;
+  font-size: 12px;
+  margin-right: 4px;
+}
+.iv-chip.play {
+  min-width: 72px;
+  font-variant-numeric: tabular-nums;
+}
+.iv-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  padding: 0;
+}
+.iv-swatch:hover {
+  outline: 2px solid #5a86f0;
+}
+.iv-swatch.src {
+  border-style: dashed;
+}
+.iv-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 4px;
+}

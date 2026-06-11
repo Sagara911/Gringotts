@@ -28,6 +28,7 @@ import MenuBar from "./components/MenuBar";
 import SettingsModal from "./components/SettingsModal";
 import CmdManagerModal from "./components/CmdManagerModal";
 import UpdateModal from "./components/UpdateModal";
+import ImageViewer from "./components/ImageViewer";
 import "./App.css";
 
 const DOCK_KEY = "nobi-dock-v1";
@@ -48,6 +49,7 @@ function App() {
   const [aiResult, setAiResult] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [ctx, setCtx] = useState<{ x: number; y: number; asset: Asset } | null>(null);
+  const [viewer, setViewer] = useState<{ list: Asset[]; index: number } | null>(null);
   const [searchMode, setSearchMode] = useState<"name" | "semantic">("name");
   const [semanticIds, setSemanticIds] = useState<number[] | null>(null);
   const [resultLabel, setResultLabel] = useState("");
@@ -742,6 +744,14 @@ function App() {
     : sorted;
   const selected = assets.find((a) => a.id === selectedId) ?? null;
 
+  // 看图/练习浮层：多选时拿选中的当播放列表（练 gesture），否则用当前过滤列表
+  function openViewer(id: number) {
+    const playlist =
+      sel.size > 1 && sel.has(id) ? displayList.filter((a) => sel.has(a.id)) : displayList;
+    const start = Math.max(0, playlist.findIndex((a) => a.id === id));
+    if (playlist.length) setViewer({ list: playlist, index: start });
+  }
+
   const isActive = (f: Filter) =>
     f.kind === filter.kind &&
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -849,6 +859,7 @@ function App() {
     openBoardWith,
     selectedId,
     onCardClick,
+    openViewer,
     openCtxMenu,
     toggleFavorite,
     selected,
@@ -906,6 +917,14 @@ function App() {
 
       {update && <UpdateModal update={update} onClose={() => setUpdate(null)} />}
 
+      {viewer && (
+        <ImageViewer
+          assets={viewer.list}
+          index={viewer.index}
+          onClose={() => setViewer(null)}
+        />
+      )}
+
       {dragOver && (
         <div className="drop-overlay">
           <div className="drop-hint">📥 松开导入素材（支持文件 / 文件夹）</div>
@@ -923,6 +942,16 @@ function App() {
             }}
           />
           <div className="ctx-menu" style={{ left: ctx.x, top: ctx.y }}>
+            <div
+              className="ctx-item"
+              onClick={() => {
+                openViewer(ctx.asset.id);
+                setCtx(null);
+              }}
+            >
+              看图 / 练习（取色·灰度·镜像·计时）
+            </div>
+            <div className="ctx-sep" />
             <div
               className="ctx-item"
               onClick={() => {

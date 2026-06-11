@@ -46,6 +46,7 @@ export interface DockState {
   openBoardWith: (l: Asset[]) => void;
   selectedId: number | null;
   onCardClick: (e: React.MouseEvent, id: number) => void;
+  openViewer: (id: number) => void;
   openCtxMenu: (e: React.MouseEvent, a: Asset) => void;
   toggleFavorite: (id: number, fav: boolean) => void;
   selected: Asset | null;
@@ -339,6 +340,10 @@ function GridPanel(p: IDockviewPanelProps) {
                   (d.sel.has(a.id) ? " multi" : "")
                 }
                 onClick={(e) => d.onCardClick(e, a.id)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  d.openViewer(a.id);
+                }}
                 onContextMenu={(e) => d.openCtxMenu(e, a)}
               >
                 <div className="thumb">
