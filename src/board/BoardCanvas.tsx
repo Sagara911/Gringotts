@@ -259,8 +259,11 @@ function PencilNode({ s }: { s: DrawShape }) {
   return <KShape sceneFunc={sceneFunc} hitFunc={hitFunc} stroke={hex} strokeWidth={w + 10} />;
 }
 
-function ImageNode({ s }: { s: ImageShape }) {
-  const el = useImageEl(s.src);
+function ImageNode({ s, full }: { s: ImageShape; full: boolean }) {
+  // 双层：缩略图常驻，放大需要细节时再加载原图，原图没好时缩略图顶着（不闪灰块）
+  const thumbEl = useImageEl(s.thumbSrc || s.src);
+  const fullEl = useImageEl(full && s.thumbSrc ? s.src : "");
+  const el = fullEl ?? thumbEl;
   if (!el) return <KRect width={s.w} height={s.h} fill="#26262b" cornerRadius={2} />;
   const crop = s.crop
     ? {
@@ -348,15 +351,17 @@ const ShapeView = memo(
     s,
     hidden,
     offscreen = false,
+    imgFull = false,
   }: {
     s: BoardShape;
     hidden: boolean;
     offscreen?: boolean;
+    imgFull?: boolean;
   }) {
     let inner: React.ReactNode = null;
     switch (s.type) {
       case "image":
-        inner = <ImageNode s={s} />;
+        inner = <ImageNode s={s} full={imgFull} />;
         break;
       case "draw": {
         if (s.brush === "pencil") {
@@ -415,7 +420,11 @@ const ShapeView = memo(
       </Group>
     );
   },
-  (a, b) => a.s === b.s && a.hidden === b.hidden && a.offscreen === b.offscreen
+  (a, b) =>
+    a.s === b.s &&
+    a.hidden === b.hidden &&
+    a.offscreen === b.offscreen &&
+    a.imgFull === b.imgFull
 );
 
 // ---------- 工具图标 ----------
@@ -1950,6 +1959,8 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
               s={s}
               hidden={editing?.id === s.id || crop?.id === s.id}
               offscreen={!boxesIntersect(viewBox, shapeBounds(s))}
+              // LOD：无独立缩略图或显示宽度超 512px 时加载原图（仅 image 形状）
+              imgFull={s.type === "image" && (!s.thumbSrc || s.w * cam.z > 512)}
             />
           ))}
           {previewDraw && <ShapeView s={previewDraw} hidden={false} />}

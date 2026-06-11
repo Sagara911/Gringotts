@@ -119,6 +119,7 @@ export type BoardShape = ImageShape | DrawShape | GeoShape | ArrowShape | TextSh
 export interface BoardImage {
   id: number;
   path: string;
+  thumb?: string; // 缩略图地址（LOD：缩小/远观时加载它省内存）
   name: string;
   width: number;
   height: number;
@@ -665,6 +666,7 @@ export class Editor {
       created.push({
         id: newId(), type: "image", x, y, rotation: 0, opacity: 1,
         w, h, src: imageSrc(img.path), name: img.name,
+        thumbSrc: img.thumb ? imageSrc(img.thumb) : undefined,
       });
       col++;
       rowH = Math.max(rowH, h);

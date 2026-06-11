@@ -272,7 +272,8 @@ function App() {
   const pendingBoard = useRef<BoardImage[]>([]);
 
   function toBoardImg(a: Asset): BoardImage {
-    return { id: a.id, path: a.thumb || a.path, name: a.name, width: a.width, height: a.height };
+    // LOD：原图与缩略图两个地址都传给画板，由 ImageNode 按显示尺寸自动切换
+    return { id: a.id, path: a.path, thumb: a.thumb, name: a.name, width: a.width, height: a.height };
   }
   function flushBoard() {
     if (boardEditor.current && pendingBoard.current.length) {

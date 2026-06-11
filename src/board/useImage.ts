@@ -7,6 +7,7 @@ const imgWaiters = new Map<string, Set<() => void>>();
 export function useImageEl(src: string): HTMLImageElement | null {
   const [, force] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
+    if (!src) return; // 空 src：不创建 Image、不加载（LOD 下用于“暂不加载原图”）
     if (imgCache.has(src)) return;
     let subs = imgWaiters.get(src);
     if (!subs) {
