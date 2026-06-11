@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { check as checkUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -815,7 +816,7 @@ function App() {
       items: [
         { label: "GitHub 仓库", action: () => openUrl(REPO_URL) },
         { label: "检查更新…", action: () => checkUpdateAction(false) },
-        { label: "关于 Nobi", action: () => setStatus("Nobi v0.1.0 · 素材精灵") },
+        { label: "关于 Nobi", action: async () => setStatus(`Nobi v${await getVersion()} · 素材精灵`) },
       ],
     },
   ];
