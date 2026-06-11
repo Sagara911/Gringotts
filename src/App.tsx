@@ -29,6 +29,7 @@ import SettingsModal from "./components/SettingsModal";
 import CmdManagerModal from "./components/CmdManagerModal";
 import UpdateModal from "./components/UpdateModal";
 import ImageViewer from "./components/ImageViewer";
+import { buildContactSheetPdf, bytesToB64 } from "./contactSheet";
 import "./App.css";
 
 const DOCK_KEY = "nobi-dock-v1";
@@ -615,6 +616,41 @@ function App() {
     onSimilar(assetId);
   }
 
+  // 导出联系表 PDF：一组素材排成带文件名的缩略图网格图集，发给客户/同事
+  async function exportContactSheet(list: Asset[], title: string) {
+    if (!list.length) {
+      setStatus("没有可导出的素材");
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus(`生成联系表 PDF…（${list.length} 张）`);
+      const items = list.map((a) => ({ src: convertFileSrc(a.thumb || a.path), name: a.name }));
+      const b64 = bytesToB64(await buildContactSheetPdf(items, title || "Nobi 联系表"));
+      const safe = (title || "contact-sheet").replace(/[\\/:*?"<>|]/g, "_");
+      try {
+        const path = await save({
+          defaultPath: `${safe}.pdf`,
+          filters: [{ name: "PDF", extensions: ["pdf"] }],
+        });
+        if (path) {
+          await api.saveFile(path, b64);
+          setStatus(`已导出联系表：${path}`);
+        } else setStatus("");
+      } catch {
+        // 浏览器环境：退回 <a download>
+        const a = document.createElement("a");
+        a.href = "data:application/pdf;base64," + b64;
+        a.download = `${safe}.pdf`;
+        a.click();
+      }
+    } catch (e) {
+      setStatus(`导出联系表失败：${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ===== 合集 =====
   async function openCollection(id: number) {
     try {
@@ -1002,6 +1038,7 @@ function App() {
     addSelToCollection,
     deleteCollection: deleteCollectionAction,
     saveBoardAsCollection,
+    exportContactSheet,
     thumbSize,
     setThumbSize,
     query,

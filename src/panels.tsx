@@ -68,6 +68,7 @@ export interface DockState {
   addSelToCollection: (id: number) => void;
   deleteCollection: (id: number) => void;
   saveBoardAsCollection: (assetIds: number[]) => void;
+  exportContactSheet: (list: Asset[], title: string) => void;
   thumbSize: number;
   setThumbSize: (n: number) => void;
   query: string;
@@ -322,6 +323,15 @@ function GridPanel(p: IDockviewPanelProps) {
               退出
             </button>
           )}
+          {d.filter.kind === "collection" && d.displayList.length > 0 && (
+            <button
+              className="btn link"
+              onClick={() => d.exportContactSheet(d.displayList, d.filterLabel)}
+              title="把该合集排成带文件名的缩略图网格，导出 PDF"
+            >
+              导出 PDF
+            </button>
+          )}
         </span>
         <span className="grid-head-right">
           <span className="status-text">{d.status}</span>
@@ -376,6 +386,19 @@ function GridPanel(p: IDockviewPanelProps) {
           </button>
           <button className="btn" onClick={d.createCollectionFromSel}>
             存为合集
+          </button>
+          <button
+            className="btn"
+            onClick={() =>
+              d.exportContactSheet(
+                d.assets.filter((a) => d.sel.has(a.id)),
+                "Nobi 联系表"
+              )
+            }
+            disabled={d.busy}
+            title="把选中的图排成带文件名的缩略图网格，导出 PDF"
+          >
+            导出联系表 PDF
           </button>
           {d.collections.length > 0 && (
             <select
