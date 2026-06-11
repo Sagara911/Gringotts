@@ -233,7 +233,8 @@ function App() {
       return [];
     };
 
-    const EXT_OK = /\.(jpe?g|png|gif|webp|bmp|tiff?|avif|mp4|webm|mov|mkv|avi)$/i;
+    const EXT_OK =
+      /\.(jpe?g|png|gif|webp|bmp|tiff?|avif|mp4|webm|mov|mkv|avi|glb|gltf|obj|fbx|stl)$/i;
 
     const onDragOver = (e: DragEvent) => {
       if (!isFileDrag(e) || onBoard(e) || onRev(e)) return;
@@ -275,7 +276,7 @@ function App() {
         }
       }
       await reload();
-      setStatus(`已导入 ${done} 个素材（存于 图片\\Nobi）`);
+      setStatus(`已导入 ${done} 个素材（存于 图片\\Nobi；外链 GLTF 建议用“导入文件夹”）`);
       setBusy(false);
       buildThumbs();
     };
