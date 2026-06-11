@@ -46,6 +46,8 @@ export interface ImageShape extends ShapeBase {
   h: number;
   src: string;
   name: string;
+  /** 缩略图地址（LOD：缩小/远观时加载它省内存，放大看细节才换 src 原图） */
+  thumbSrc?: string;
   /** 归一化裁剪框（0-1，相对原图），无裁剪为 undefined */
   crop?: { x: number; y: number; w: number; h: number };
 }
@@ -72,12 +74,22 @@ export interface GeoShape extends ShapeBase {
   size: SizeKey;
 }
 
+/** 箭头端点绑定到某形状：拖动/缩放该形状时箭头端点自动重算 */
+export interface ArrowBinding {
+  shapeId: string;
+  /** 归一化锚点（0-1，相对目标未旋转包围盒）；缺省取几何中心由射线求边缘交点 */
+  ax?: number;
+  ay?: number;
+}
+
 export interface ArrowShape extends ShapeBase {
   type: "arrow";
   x2: number; // 终点（相对 x,y）
   y2: number;
   color: string;
   size: SizeKey;
+  bindStart?: ArrowBinding;
+  bindEnd?: ArrowBinding;
 }
 
 /** 行内富文本分段：一段连续同样式的文字（text 内可含 \n 表示手动换行） */
@@ -314,9 +326,20 @@ export class BoardStore {
 
   deleteShapes(ids: string[]) {
     if (!ids.length) return;
+    const gone = new Set(ids);
     this.mutate(() => {
-      this.shapes = this.shapes.filter((s) => !ids.includes(s.id));
-      this.selection = this.selection.filter((id) => !ids.includes(id));
+      this.shapes = this.shapes
+        .filter((s) => !gone.has(s.id))
+        .map((s) => {
+          // 清掉指向已删形状的箭头绑定
+          if (s.type !== "arrow") return s;
+          let bs = s.bindStart;
+          let be = s.bindEnd;
+          if (bs && gone.has(bs.shapeId)) bs = undefined;
+          if (be && gone.has(be.shapeId)) be = undefined;
+          return bs === s.bindStart && be === s.bindEnd ? s : { ...s, bindStart: bs, bindEnd: be };
+        });
+      this.selection = this.selection.filter((id) => !gone.has(id));
     });
   }
 

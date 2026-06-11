@@ -42,6 +42,7 @@ import type { Editor as TiptapEditor } from "@tiptap/react";
 import CropEditor, { type CropRect, fullExtent } from "./CropEditor";
 import TextEditorOverlay from "./TextEditorOverlay";
 import { docToRuns, layoutRuns, runsToText, shapeToDoc } from "./richtext";
+import { hitTestShape, reflowArrows, resolveArrow } from "./binding";
 import { HOTKEYS, comboOf, loadBindings, resetBindings, saveBinding } from "./shortcuts";
 import { collectSnapTargets, snapMove, type SnapTargets } from "./snap";
 import { useImageEl } from "./useImage";
@@ -869,8 +870,10 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
       patches.set(s.id, patch);
     }
     store.applyLive(() => {
-      store.shapes = store.shapes.map((s) =>
-        patches.has(s.id) ? ({ ...s, ...patches.get(s.id) } as BoardShape) : s
+      store.shapes = reflowArrows(
+        store.shapes.map((s) =>
+          patches.has(s.id) ? ({ ...s, ...patches.get(s.id) } as BoardShape) : s
+        )
       );
     });
     if (transformCp.current) store.commit(transformCp.current);
@@ -1152,10 +1155,12 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
             sess.guides = { v: snapped.vLines, h: snapped.hLines };
           }
           store.applyLive(() => {
-            store.shapes = store.shapes.map((s) => {
-              const o = sess.orig.get(s.id);
-              return o ? { ...s, x: o.x + mdx, y: o.y + mdy } : s;
-            });
+            store.shapes = reflowArrows(
+              store.shapes.map((s) => {
+                const o = sess.orig.get(s.id);
+                return o ? { ...s, x: o.x + mdx, y: o.y + mdy } : s;
+              })
+            );
           });
           break;
         }
@@ -1242,12 +1247,17 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
               y2 = Math.sin(ang) * len;
             }
             if (Math.hypot(x2, y2) > 4) {
-              store.createShapes([
-                {
-                  id: newId(), type: "arrow", x: start.x, y: start.y, rotation: 0, opacity: 1,
-                  x2, y2, color: st.color, size: st.size,
-                },
-              ]);
+              // 两端若落在形状上则自动绑定（拖动该形状箭头跟随）
+              const startHit = hitTestShape(store.shapes, start);
+              const endHit = hitTestShape(store.shapes, { x: start.x + x2, y: start.y + y2 });
+              const id = newId();
+              const arrow: ArrowShape = {
+                id, type: "arrow", x: start.x, y: start.y, rotation: 0, opacity: 1,
+                x2, y2, color: st.color, size: st.size,
+                bindStart: startHit ? { shapeId: startHit } : undefined,
+                bindEnd: endHit ? { shapeId: endHit } : undefined,
+              };
+              store.createShapes([{ ...arrow, ...resolveArrow(arrow, (i) => store.getShape(i)) }]);
               setTool("select");
             }
           } else {
@@ -2036,16 +2046,21 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
                   }}
                   onDragMove={(ev) => {
                     const p = toPage({ x: ev.target.x() + 5, y: ev.target.y() + 5 });
+                    // 端点落在某形状上 → 绑定该形状（不含箭头自身）
+                    const hit = hitTestShape(store.shapes, p, arrowSel.id);
+                    const bind = hit ? { shapeId: hit } : undefined;
                     store.applyLive(() => {
-                      store.shapes = store.shapes.map((sh) => {
-                        if (sh.id !== arrowSel.id || sh.type !== "arrow") return sh;
-                        if (which === "start") {
-                          const endX = sh.x + sh.x2;
-                          const endY = sh.y + sh.y2;
-                          return { ...sh, x: p.x, y: p.y, x2: endX - p.x, y2: endY - p.y };
-                        }
-                        return { ...sh, x2: p.x - sh.x, y2: p.y - sh.y };
-                      });
+                      store.shapes = reflowArrows(
+                        store.shapes.map((sh) => {
+                          if (sh.id !== arrowSel.id || sh.type !== "arrow") return sh;
+                          if (which === "start") {
+                            const endX = sh.x + sh.x2;
+                            const endY = sh.y + sh.y2;
+                            return { ...sh, x: p.x, y: p.y, x2: endX - p.x, y2: endY - p.y, bindStart: bind };
+                          }
+                          return { ...sh, x2: p.x - sh.x, y2: p.y - sh.y, bindEnd: bind };
+                        })
+                      );
                     });
                   }}
                   onDragEnd={() => {
