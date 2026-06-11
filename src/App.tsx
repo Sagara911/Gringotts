@@ -7,9 +7,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { ask, open, save } from "@tauri-apps/plugin-dialog";
-import { check as checkUpdate } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { check as checkUpdate, type Update } from "@tauri-apps/plugin-updater";
 import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -28,6 +27,7 @@ import { DockCtx, DOCK_COMPONENTS, type DockState } from "./panels";
 import MenuBar from "./components/MenuBar";
 import SettingsModal from "./components/SettingsModal";
 import CmdManagerModal from "./components/CmdManagerModal";
+import UpdateModal from "./components/UpdateModal";
 import "./App.css";
 
 const DOCK_KEY = "nobi-dock-v1";
@@ -40,6 +40,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [busy, setBusy] = useState(false);
+  const [update, setUpdate] = useState<Update | null>(null);
+  const [appVersion, setAppVersion] = useState("");
   const [status, setStatus] = useState("");
   const [batchTag, setBatchTag] = useState("");
   const [aiBusy, setAiBusy] = useState<string | null>(null);
@@ -627,7 +629,7 @@ function App() {
     }
   }
 
-  /** 检查更新：silent=启动时静默（无更新/出错都不打扰），手动检查则有反馈 */
+  /** 检查更新：有新版弹自研弹窗；silent=启动静默（无更新/出错不打扰） */
   async function checkUpdateAction(silent: boolean) {
     try {
       const up = await checkUpdate();
@@ -635,22 +637,16 @@ function App() {
         if (!silent) setStatus("已是最新版本");
         return;
       }
-      const go = await ask(
-        `发现新版本 v${up.version}（当前 v${up.currentVersion}），现在下载并安装吗？`,
-        { title: "Nobi 更新", kind: "info" }
-      );
-      if (!go) return;
-      setStatus(`正在下载更新 v${up.version}…`);
-      await up.downloadAndInstall();
-      const restart = await ask("更新已安装，重启 Nobi 生效。现在重启？", {
-        title: "Nobi 更新",
-      });
-      if (restart) await relaunch();
-      else setStatus("更新已就绪，下次启动生效");
+      setUpdate(up);
     } catch (e) {
       if (!silent) setStatus(`检查更新失败：${e}`);
     }
   }
+
+  // 取应用版本号（顶部徽标 + 关于）
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
 
   // 启动 3 秒后静默检查一次（开发模式/无发布时静默失败，不打扰）
   useEffect(() => {
@@ -816,7 +812,7 @@ function App() {
       items: [
         { label: "GitHub 仓库", action: () => openUrl(REPO_URL) },
         { label: "检查更新…", action: () => checkUpdateAction(false) },
-        { label: "关于 Nobi", action: async () => setStatus(`Nobi v${await getVersion()} · 素材精灵`) },
+        { label: "关于 Nobi", action: () => setStatus(`Nobi v${appVersion} · 素材精灵`) },
       ],
     },
   ];
@@ -883,7 +879,10 @@ function App() {
     <DockCtx.Provider value={dockState}>
     <div className="app">
       <header className="topbar">
-        <div className="brand">Nobi</div>
+        <div className="brand">
+          Nobi
+          {appVersion && <span className="brand-ver">v{appVersion}</span>}
+        </div>
         <MenuBar menus={menus} />
         <button className="btn primary" onClick={handleImport} disabled={busy}>
           {busy ? "处理中…" : "导入文件夹"}
@@ -903,6 +902,8 @@ function App() {
       )}
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+
+      {update && <UpdateModal update={update} onClose={() => setUpdate(null)} />}
 
       {dragOver && (
         <div className="drop-overlay">

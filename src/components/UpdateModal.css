@@ -1,0 +1,129 @@
+/* 更新弹窗 —— Nobi 暗色风格 */
+.upd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: upd-fade 0.18s ease;
+}
+@keyframes upd-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.upd-modal {
+  width: 360px;
+  background: #1d1d20;
+  border: 1px solid #2c2c31;
+  border-radius: 16px;
+  padding: 26px 26px 22px;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  animation: upd-pop 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes upd-pop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.upd-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f1ac4b, #e8590c);
+  color: #fff;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(232, 89, 12, 0.4);
+}
+.upd-modal h3 {
+  margin: 0 0 12px;
+  font-size: 17px;
+  color: #f2f2f2;
+}
+.upd-ver {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.upd-old { color: #88888f; }
+.upd-arrow { color: #88888f; }
+.upd-new {
+  color: #f1ac4b;
+  font-weight: 700;
+}
+.upd-notes {
+  max-height: 160px;
+  overflow-y: auto;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #b8b8c0;
+  background: #141416;
+  border-radius: 9px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  white-space: pre-wrap;
+}
+.upd-sub {
+  font-size: 13px;
+  color: #b8b8c0;
+  margin: 0 0 18px;
+}
+.upd-err {
+  color: #ff8787;
+  max-height: 120px;
+  overflow-y: auto;
+  word-break: break-all;
+}
+.upd-actions {
+  display: flex;
+  gap: 10px;
+}
+.upd-btn {
+  flex: 1;
+  height: 38px;
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.upd-btn.ghost {
+  background: #29292e;
+  color: #cfcfd4;
+}
+.upd-btn.ghost:hover { background: #333339; }
+.upd-btn.primary {
+  background: linear-gradient(135deg, #f1ac4b, #e8590c);
+  color: #fff;
+}
+.upd-btn.primary:hover { filter: brightness(1.08); }
+
+.upd-bar {
+  height: 8px;
+  background: #29292e;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.upd-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f1ac4b, #e8590c);
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+.upd-progress-text {
+  font-size: 12px;
+  color: #88888f;
+  font-variant-numeric: tabular-nums;
+}
