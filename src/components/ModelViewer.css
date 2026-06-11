@@ -76,9 +76,27 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 .mv-canvas canvas {
   display: block;
+}
+.mv-webgl,
+.mv-fallback-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.mv-webgl {
+  z-index: 1;
+}
+.mv-fallback-img {
+  z-index: 2;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  display: none;
 }
 .mv-status {
   position: absolute;
