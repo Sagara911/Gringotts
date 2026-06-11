@@ -73,9 +73,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             // 点窗口关闭按钮 = 收进托盘而非退出（真正退出走托盘菜单「退出」）
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
