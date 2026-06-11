@@ -8,7 +8,9 @@ use rusqlite::Connection;
 use tauri::Manager;
 use walkdir::WalkDir;
 
-use crate::db::{fetch_assets, now_secs, open_db, Asset, AUDIO_EXTS, IMAGE_EXTS, VIDEO_EXTS};
+use crate::db::{
+    fetch_assets, now_secs, open_db, Asset, AUDIO_EXTS, IMAGE_EXTS, MODEL_EXTS, VIDEO_EXTS,
+};
 
 /// 递归扫描一个路径（文件或文件夹），图片入库。返回新增数量。
 fn scan_path(conn: &Connection, path: &str, now: i64) -> Result<usize, String> {
@@ -27,6 +29,7 @@ fn scan_path(conn: &Connection, path: &str, now: i64) -> Result<usize, String> {
         if !IMAGE_EXTS.contains(&ext.as_str())
             && !VIDEO_EXTS.contains(&ext.as_str())
             && !AUDIO_EXTS.contains(&ext.as_str())
+            && !MODEL_EXTS.contains(&ext.as_str())
         {
             continue;
         }
@@ -135,6 +138,7 @@ pub fn import_blob(
     if !IMAGE_EXTS.contains(&ext.as_str())
         && !VIDEO_EXTS.contains(&ext.as_str())
         && !AUDIO_EXTS.contains(&ext.as_str())
+        && !MODEL_EXTS.contains(&ext.as_str())
     {
         return Err(format!("不支持的格式：{ext}"));
     }

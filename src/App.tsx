@@ -21,7 +21,7 @@ import {
 import "dockview/dist/styles/dockview.css";
 
 import type { AiCmd, Asset, Collection, Filter, Menu, SortKey } from "./types";
-import { DOBBY_URL, REPO_URL, isAudio, primaryBucket } from "./utils";
+import { DOBBY_URL, REPO_URL, isAudio, isImage, isModel, primaryBucket } from "./utils";
 import * as api from "./api";
 import { imageVector, textVector } from "./clip";
 import { addImages, type BoardEditor, type BoardImage } from "./Board";
@@ -31,6 +31,7 @@ import SettingsModal from "./components/SettingsModal";
 import CmdManagerModal from "./components/CmdManagerModal";
 import UpdateModal from "./components/UpdateModal";
 import ImageViewer from "./components/ImageViewer";
+import ModelViewer from "./components/ModelViewer";
 import { buildContactSheetPdf, bytesToB64 } from "./contactSheet";
 import "./App.css";
 
@@ -53,6 +54,7 @@ function App() {
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [ctx, setCtx] = useState<{ x: number; y: number; asset: Asset } | null>(null);
   const [viewer, setViewer] = useState<{ list: Asset[]; index: number } | null>(null);
+  const [modelViewer, setModelViewer] = useState<Asset | null>(null);
   const refSeq = useRef(0); // 悬浮参考浮窗的唯一 label 序号
   const ctxRef = useRef<HTMLDivElement | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -328,10 +330,10 @@ function App() {
     });
   }
   function openBoardWith(list: Asset[]) {
-    // 音频没有画面，上画板只会得到一块永远加载不出的灰图——直接过滤
-    const visual = list.filter((a) => !isAudio(a));
+    // 音频无画面、3D 原文件画板加载不了（缩略图顶不住放大换原图）——直接过滤
+    const visual = list.filter((a) => !isAudio(a) && !isModel(a));
     if (!visual.length) {
-      setStatus("音频素材无法加入画板");
+      setStatus("音频 / 3D 素材无法加入画板");
       return;
     }
     pendingBoard.current.push(...visual.map(toBoardImg));
@@ -958,11 +960,20 @@ function App() {
     win.once("tauri://error", (e) => setStatus(`悬浮窗打开失败：${JSON.stringify(e.payload)}`));
   }
 
-  // 看图/练习浮层：多选时拿选中的当播放列表（练 gesture），否则用当前过滤列表
+  // 看图/练习浮层：多选时拿选中的当播放列表（练 gesture），否则用当前过滤列表。
+  // 3D 模型路由到 ModelViewer；音频/视频没有静态画面，不进看图浮层。
   function openViewer(id: number) {
-    const playlist =
-      sel.size > 1 && sel.has(id) ? displayList.filter((a) => sel.has(a.id)) : displayList;
-    const start = Math.max(0, playlist.findIndex((a) => a.id === id));
+    const a = assets.find((x) => x.id === id);
+    if (!a) return;
+    if (isModel(a)) {
+      setModelViewer(a);
+      return;
+    }
+    if (!isImage(a)) return;
+    const base =
+      sel.size > 1 && sel.has(id) ? displayList.filter((x) => sel.has(x.id)) : displayList;
+    const playlist = base.filter(isImage);
+    const start = Math.max(0, playlist.findIndex((x) => x.id === id));
     if (playlist.length) setViewer({ list: playlist, index: start });
   }
 
@@ -1150,6 +1161,14 @@ function App() {
         />
       )}
 
+      {modelViewer && (
+        <ModelViewer
+          asset={modelViewer}
+          onClose={() => setModelViewer(null)}
+          onThumbSaved={reload}
+        />
+      )}
+
       {dragOver && (
         <div className="drop-overlay">
           <div className="drop-hint">📥 松开导入素材（支持文件 / 文件夹）</div>
@@ -1169,25 +1188,40 @@ function App() {
             }}
           />
           <div ref={ctxRef} className="ctx-menu" style={{ left: ctx.x, top: ctx.y }}>
-            <div
-              className="ctx-item"
-              onClick={() => {
-                openViewer(ctx.asset.id);
-                setCtx(null);
-              }}
-            >
-              看图 / 练习（取色·灰度·镜像·计时）
-            </div>
-            <div
-              className="ctx-item"
-              onClick={() => {
-                openRefWindow(ctx.asset);
-                setCtx(null);
-              }}
-            >
-              悬浮到桌面（置顶参考）
-            </div>
-            <div className="ctx-sep" />
+            {isImage(ctx.asset) && (
+              <div
+                className="ctx-item"
+                onClick={() => {
+                  openViewer(ctx.asset.id);
+                  setCtx(null);
+                }}
+              >
+                看图 / 练习（取色·灰度·镜像·计时）
+              </div>
+            )}
+            {isModel(ctx.asset) && (
+              <div
+                className="ctx-item"
+                onClick={() => {
+                  openViewer(ctx.asset.id);
+                  setCtx(null);
+                }}
+              >
+                3D 查看（转圈 · 存封面）
+              </div>
+            )}
+            {isImage(ctx.asset) && (
+              <div
+                className="ctx-item"
+                onClick={() => {
+                  openRefWindow(ctx.asset);
+                  setCtx(null);
+                }}
+              >
+                悬浮到桌面（置顶参考）
+              </div>
+            )}
+            {(isImage(ctx.asset) || isModel(ctx.asset)) && <div className="ctx-sep" />}
             <div
               className="ctx-item"
               onClick={() => {

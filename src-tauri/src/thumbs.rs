@@ -135,3 +135,27 @@ pub fn build_thumbnails(app: tauri::AppHandle) -> Result<usize, String> {
     }
     Ok(done)
 }
+
+/// 前端渲染的封面写回（3D 模型查看器首帧等）：
+/// 收 PNG base64 → 缩到 400px 存缓存目录 → 顺带提主色，更新 thumb+colors。
+#[tauri::command]
+pub fn set_thumb(app: tauri::AppHandle, id: i64, data_b64: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data_b64)
+        .map_err(|e| e.to_string())?;
+    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+    let thumb = img.thumbnail(400, 400);
+    let dir = thumbs_dir(&app)?;
+    let tp = dir.join(format!("{id}.png"));
+    thumb.save(&tp).map_err(|e| e.to_string())?;
+    let colors = dominant_colors(&thumb);
+    let cj = serde_json::to_string(&colors).unwrap_or_else(|_| "[]".to_string());
+    let conn = open_db(&app)?;
+    conn.execute(
+        "UPDATE assets SET thumb=?1, colors=?2 WHERE id=?3",
+        rusqlite::params![tp.to_string_lossy().to_string(), cj, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(tp.to_string_lossy().to_string())
+}

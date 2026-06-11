@@ -42,9 +42,11 @@ pub const IMAGE_EXTS: &[&str] = &[
 pub const VIDEO_EXTS: &[&str] = &["mp4", "webm", "mov", "mkv", "avi"];
 /// 音频格式：可导入与播放预览（WebView2 原生解码）；同样不做缩略图/配色/CLIP
 pub const AUDIO_EXTS: &[&str] = &["mp3", "wav", "ogg", "flac", "m4a", "aac"];
-/// 跳过缩略图/配色/CLIP 管线的格式（视频+音频），供 SQL NOT IN 过滤
-pub const MEDIA_FORMATS_SQL: &str =
-    "('MP4','WEBM','MOV','MKV','AVI','MP3','WAV','OGG','FLAC','M4A','AAC')";
+/// 3D 模型格式：前端 three.js 查看器渲染；缩略图由查看器首帧经 set_thumb 写回
+pub const MODEL_EXTS: &[&str] = &["glb", "gltf", "obj", "fbx", "stl"];
+/// 跳过缩略图/配色/CLIP 管线的格式（视频+音频+3D，Rust 渲不了），供 SQL NOT IN 过滤
+pub const MEDIA_FORMATS_SQL: &str = "('MP4','WEBM','MOV','MKV','AVI',\
+    'MP3','WAV','OGG','FLAC','M4A','AAC','GLB','GLTF','OBJ','FBX','STL')";
 
 fn db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

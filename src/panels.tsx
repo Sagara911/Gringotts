@@ -7,7 +7,7 @@ import { VirtuosoGrid } from "react-virtuoso";
 import type { IDockviewPanelProps } from "dockview";
 
 import type { AiCmd, Asset, Collection, Filter, SortKey } from "./types";
-import { COLOR_BUCKETS, isAudio, isVideo } from "./utils";
+import { COLOR_BUCKETS, isAudio, isModel, isVideo } from "./utils";
 import Inspector from "./components/Inspector";
 import TagTree from "./components/TagTree";
 import Section from "./components/Section";
@@ -476,6 +476,19 @@ function GridPanel(p: IDockviewPanelProps) {
                       <span className="thumb-audio-icon">♪</span>
                       <span className="thumb-audio-fmt">{a.format}</span>
                     </div>
+                  ) : isModel(a) ? (
+                    a.thumb ? (
+                      <>
+                        <span className="badge-video badge-3d">3D</span>
+                        <img src={convertFileSrc(a.thumb)} loading="lazy" alt={a.name} />
+                      </>
+                    ) : (
+                      <div className="thumb-audio">
+                        <span className="badge-video badge-3d">3D</span>
+                        <span className="thumb-audio-icon">◆</span>
+                        <span className="thumb-audio-fmt">{a.format} · 双击查看生成封面</span>
+                      </div>
+                    )
                   ) : (
                     <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
                   )}
@@ -521,6 +534,7 @@ function InspectorPanel(_p: IDockviewPanelProps) {
       cmds={d.cmds}
       onAiCustom={d.aiRunCustom}
       onManageCmds={d.openCmdMgr}
+      onOpen3D={d.openViewer}
     />
   );
 }

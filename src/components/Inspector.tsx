@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { AiCmd, Asset } from "../types";
-import { humanSize, isAudio, isVideo } from "../utils";
+import { humanSize, isAudio, isImage, isModel, isVideo } from "../utils";
 import Section from "./Section";
 
 export default function Inspector({
@@ -17,6 +17,7 @@ export default function Inspector({
   cmds,
   onAiCustom,
   onManageCmds,
+  onOpen3D,
 }: {
   asset: Asset | null;
   onAddTag: (id: number, tag: string) => void;
@@ -30,6 +31,8 @@ export default function Inspector({
   cmds: AiCmd[];
   onAiCustom: (id: number, cmd: AiCmd) => void;
   onManageCmds: () => void;
+  /** 3D 模型：点预览打开查看器 */
+  onOpen3D?: (id: number) => void;
 }) {
   const [tagInput, setTagInput] = useState("");
   if (!asset) {
@@ -47,6 +50,19 @@ export default function Inspector({
         <div className="preview preview-audio">
           <span className="preview-audio-icon">♪</span>
           <audio src={convertFileSrc(asset.path)} controls preload="metadata" />
+        </div>
+      ) : isModel(asset) ? (
+        <div
+          className="preview preview-model"
+          title="点击在 3D 查看器中打开"
+          onClick={() => onOpen3D?.(asset.id)}
+        >
+          {asset.thumb ? (
+            <img src={convertFileSrc(asset.thumb)} alt={asset.name} />
+          ) : (
+            <span className="preview-audio-icon">◆</span>
+          )}
+          <span className="preview-model-hint">点击 3D 查看</span>
         </div>
       ) : (
         <img className="preview" src={convertFileSrc(asset.path)} alt={asset.name} />
@@ -98,18 +114,23 @@ export default function Inspector({
         />
       </Section>
 
-      <Section k="insp-colors" title="配色" variant="insp">
-        <div className="palette">
-          {asset.colors.length === 0 ? (
-            <span className="dim">—</span>
-          ) : (
-            asset.colors.map((c, i) => (
-              <div className="swatch" key={c + i} style={{ background: c }} title={c} />
-            ))
-          )}
-        </div>
-      </Section>
+      {/* 配色：图片有；3D 生成封面后也有；音视频无此概念 */}
+      {!isAudio(asset) && !isVideo(asset) && (
+        <Section k="insp-colors" title="配色" variant="insp">
+          <div className="palette">
+            {asset.colors.length === 0 ? (
+              <span className="dim">—</span>
+            ) : (
+              asset.colors.map((c, i) => (
+                <div className="swatch" key={c + i} style={{ background: c }} title={c} />
+              ))
+            )}
+          </div>
+        </Section>
+      )}
 
+      {/* AI/找相似/参考板全是图像能力，音视频/3D 用不上——隐藏免得点了报错 */}
+      {isImage(asset) && (
       <Section k="insp-ai" title="AI 操作" variant="insp">
         <div className="ai-actions">
           <button className="ai-btn" disabled={!!aiBusy} onClick={() => onAi(asset.id, "prompt")}>
@@ -154,6 +175,7 @@ export default function Inspector({
           </div>
         )}
       </Section>
+      )}
     </section>
   );
 }

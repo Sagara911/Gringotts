@@ -32,6 +32,9 @@ export const exportMetadata = (path: string, format: string) =>
 
 // ---- 缩略图 ----
 export const buildThumbnails = () => invoke<number>("build_thumbnails");
+/** 前端渲染的封面写回（3D 查看器首帧）：PNG base64 → 400px 缩略图 + 主色 */
+export const setThumb = (id: number, dataB64: string) =>
+  invoke<string>("set_thumb", { id, dataB64 });
 
 // ---- AI（视觉） ----
 export const aiRun = (id: number, mode: string) => invoke<string>("ai_run", { id, mode });

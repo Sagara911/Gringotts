@@ -11,6 +11,12 @@ export const isVideo = (a: Asset) => VIDEO_FORMATS.has(a.format);
 const AUDIO_FORMATS = new Set(["MP3", "WAV", "OGG", "FLAC", "M4A", "AAC"]);
 export const isAudio = (a: Asset) => AUDIO_FORMATS.has(a.format);
 
+const MODEL_FORMATS = new Set(["GLB", "GLTF", "OBJ", "FBX", "STL"]);
+export const isModel = (a: Asset) => MODEL_FORMATS.has(a.format);
+
+/** 普通图片（非视频/音频/3D）：AI 打标、CLIP 找相似、画板、悬浮参考等图像能力只对它开放 */
+export const isImage = (a: Asset) => !isVideo(a) && !isAudio(a) && !isModel(a);
+
 export function humanSize(bytes: number): string {
   if (!bytes) return "—";
   const u = ["B", "KB", "MB", "GB"];

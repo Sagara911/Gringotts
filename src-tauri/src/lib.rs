@@ -94,6 +94,7 @@ pub fn run() {
             library::export_metadata,
             // thumbs
             thumbs::build_thumbnails,
+            thumbs::set_thumb,
             // ai
             ai::ai_run,
             ai::ai_tag_bulk,
