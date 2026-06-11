@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // 生成自动更新用的 latest.json（发版三步之二）：
-//   1. 签名构建（bash 里执行；密钥带密码，两个变量都要）：
+//   1. 签名构建（bash 里执行；密钥带密码，两个变量都要，密码用单引号包）：
 //        export TAURI_SIGNING_PRIVATE_KEY="$(cat /c/Users/huobingli/.tauri/nobi-updater.key)"
-//        export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<你的密钥密码>"
+//        export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<你的密钥密码>'
 //        npm run tauri build
 //   2. node scripts/make-latest-json.mjs "更新说明（可选）"
 //   3. 在 GitHub 新建 Release（tag 形如 v0.2.0），上传两个文件：

@@ -42,7 +42,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE5MzMwRjJBRDEwOTRERDAKUldUUVRRblJLZzh6cWViUG5VY2x3OHdsbkFYM3QzSDQzRTZFTWs3RktUcVpEdkJ0eGFHU2l2WmYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyQTE1QjgwNjczNzA1NEMKUldSTUJUZG5nRnVoSXNmelE0azdrandHK3FtU0t6aUh0TDl3Y3lJekVVZXlGaDI1b09yZmFBNnYK",
       "endpoints": [
         "https://github.com/Sagara911/Nobi/releases/latest/download/latest.json"
       ]
