@@ -61,6 +61,7 @@ export interface DockState {
   openCmdMgr: () => void;
   onBoardMount: (ed: BoardEditor) => void;
   findSimilarFromBoard: (assetId: number) => void;
+  reverseSearchByFile: (file: File) => void;
   collections: Collection[];
   openCollection: (id: number) => void;
   createCollectionFromSel: () => void;
@@ -275,6 +276,32 @@ function GridPanel(p: IDockviewPanelProps) {
           >
             ✨<span className="mt-text"> 语义</span>
           </button>
+          <label
+            className="mode-toggle rev-search-zone"
+            title="以图搜图：拖一张外部图到这里 / 点击选图，反查库里有没有像的（需先建 CLIP 索引）"
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const f = e.dataTransfer.files?.[0];
+              if (f) d.reverseSearchByFile(f);
+            }}
+          >
+            🖼<span className="mt-text"> 以图搜图</span>
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) d.reverseSearchByFile(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
         </div>
       </div>
       {d.progress && d.progress.total > 0 && (

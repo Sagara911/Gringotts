@@ -193,6 +193,9 @@ function App() {
     const isFileDrag = (e: DragEvent) => !!e.dataTransfer?.types?.includes("Files");
     const onBoard = (e: DragEvent) =>
       !!(e.target as HTMLElement | null)?.closest?.(".board-canvas");
+    // 「以图搜图」拖放区：归它自己处理，不走全局导入
+    const onRev = (e: DragEvent) =>
+      !!(e.target as HTMLElement | null)?.closest?.(".rev-search-zone");
 
     const fileToB64 = (f: File): Promise<string> =>
       new Promise((res, rej) => {
@@ -226,7 +229,7 @@ function App() {
     const EXT_OK = /\.(jpe?g|png|gif|webp|bmp|tiff?|avif|mp4|webm|mov|mkv|avi)$/i;
 
     const onDragOver = (e: DragEvent) => {
-      if (!isFileDrag(e) || onBoard(e)) return;
+      if (!isFileDrag(e) || onBoard(e) || onRev(e)) return;
       e.preventDefault();
       setDragOver(true);
     };
@@ -235,7 +238,7 @@ function App() {
     };
     const onDrop = async (e: DragEvent) => {
       setDragOver(false);
-      if (!isFileDrag(e) || onBoard(e)) return;
+      if (!isFileDrag(e) || onBoard(e) || onRev(e)) return;
       e.preventDefault();
       const items = e.dataTransfer?.items;
       const files: File[] = [];
@@ -578,6 +581,30 @@ function App() {
     } catch (e) {
       setStatus(`找相似失败：${e}（先点「建索引」？）`);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  // 拖外部图反查「库里有没有像的」：算外部图 CLIP 向量 → clipSearch 比对库
+  async function reverseSearchByFile(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setStatus("以图搜图：请拖入图片文件");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      setBusy(true);
+      setStatus("以图搜图：计算向量…（首次需加载 CLIP 模型）");
+      const vec = await imageVector(url);
+      const ids = await api.clipSearch(vec, 80);
+      setSemanticIds(ids);
+      setResultLabel(`🖼 以图搜图：${file.name}`);
+      ensurePanel("grid", "素材");
+      setStatus(`以图搜图：${ids.length} 个结果`);
+    } catch (e) {
+      setStatus(`以图搜图失败：${e}（先点「建索引」让库里图有向量？）`);
+    } finally {
+      URL.revokeObjectURL(url);
       setBusy(false);
     }
   }
@@ -968,6 +995,7 @@ function App() {
     openCmdMgr: () => setShowCmdMgr(true),
     onBoardMount,
     findSimilarFromBoard,
+    reverseSearchByFile,
     collections,
     openCollection,
     createCollectionFromSel,
