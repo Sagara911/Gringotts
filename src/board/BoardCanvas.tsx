@@ -38,7 +38,10 @@ import {
   saveBoard,
   saveFile,
 } from "../api";
+import type { Editor as TiptapEditor } from "@tiptap/react";
 import CropEditor, { type CropRect, fullExtent } from "./CropEditor";
+import TextEditorOverlay from "./TextEditorOverlay";
+import { docToRuns, layoutRuns, runsToText, shapeToDoc } from "./richtext";
 import { HOTKEYS, comboOf, loadBindings, resetBindings, saveBinding } from "./shortcuts";
 import { collectSnapTargets, snapMove, type SnapTargets } from "./snap";
 import { useImageEl } from "./useImage";
@@ -304,6 +307,41 @@ function ArrowNode({ s }: { s: ArrowShape }) {
   );
 }
 
+/** 行内富文本渲染：自研排版（混排测量+换行），每个同款分段一个 Konva.Text */
+function RichTextNode({ s }: { s: TextShape }) {
+  const layout = useMemo(
+    () => layoutRuns(s.runs ?? [], s.fontSize, s.w),
+    [s.runs, s.fontSize, s.w]
+  );
+  const lh = s.fontSize * 1.35;
+  return (
+    <>
+      {/* 透明命中区：行间空隙也可点选 */}
+      <KRect width={s.w ?? layout.width} height={layout.height} fill="rgba(0,0,0,0)" />
+      {layout.lines.map((ln, i) =>
+        ln.segs.map((seg, j) => (
+          <KText
+            key={`${i}-${j}`}
+            x={seg.x + (s.align === "center" ? ((s.w ?? layout.width) - ln.width) / 2 : 0)}
+            y={i * lh}
+            text={seg.text}
+            fontSize={s.fontSize}
+            lineHeight={1.35}
+            fontFamily={FONT_FAMILY}
+            fontStyle={
+              [seg.run.italic && "italic", seg.run.bold && "bold"].filter(Boolean).join(" ") ||
+              "normal"
+            }
+            textDecoration={seg.run.underline ? "underline" : undefined}
+            fill={colorHex(seg.run.color ?? s.color)}
+            listening={false}
+          />
+        ))
+      )}
+    </>
+  );
+}
+
 const ShapeView = memo(
   function ShapeView({
     s,
@@ -342,7 +380,9 @@ const ShapeView = memo(
         inner = <ArrowNode s={s} />;
         break;
       case "text":
-        inner = (
+        inner = s.runs?.length ? (
+          <RichTextNode s={s} />
+        ) : (
           <KText
             text={s.text}
             fontSize={s.fontSize}
@@ -688,8 +728,19 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
       .catch(() => setBoards([{ id: 1, name: "默认画板", updated_at: 0 }]));
     onMount(editor);
     if (import.meta.env.DEV) {
-      // 控制台调试句柄：window.__nobiBoard.store / .stage / .editor
-      (window as any).__nobiBoard = { editor, store, stage: stageRef.current };
+      // 控制台调试句柄：window.__nobiBoard.store / .stage / .editor / .openTextEditor / .tiptap
+      (window as any).__nobiBoard = {
+        editor,
+        store,
+        stage: stageRef.current,
+        openTextEditor: (id: string) => {
+          const s = store.getShape(id);
+          if (s?.type === "text") {
+            store.setSelection([id]);
+            setEditing({ id, x: s.x, y: s.y });
+          }
+        },
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1418,20 +1469,33 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
     });
   }, [store]);
 
-  // ---------- 文本样式开关（加粗/斜体/下划线）：作用于选中文本，同时记为新建默认 ----------
+  // ---------- 文本样式开关（加粗/斜体/下划线） ----------
+  // 编辑中：作用于 TipTap 选区（行内级）；否则作用于选中文本形状（整块+全部分段），并记为新建默认
   const toggleTextStyle = useCallback(
     (k: "bold" | "italic" | "underline") => {
+      const ted = tiptapRef.current;
+      if (ted) {
+        const c = ted.chain().focus();
+        if (k === "bold") c.toggleBold();
+        else if (k === "italic") c.toggleItalic();
+        else c.toggleUnderline();
+        c.run();
+        return;
+      }
       const texts = store.selectedShapes().filter((s): s is TextShape => s.type === "text");
-      const cur = texts.length ? texts.every((t) => !!t[k]) : !!styleRef.current[k];
+      const eff = (t: TextShape) =>
+        t.runs?.length ? t.runs.every((r) => !!r[k]) : !!t[k];
+      const cur = texts.length ? texts.every(eff) : !!styleRef.current[k];
       const next = !cur;
       setStyle((s) => ({ ...s, [k]: next }));
       if (texts.length) {
         store.mutate(() => {
-          store.shapes = store.shapes.map((s) =>
-            store.selection.includes(s.id) && s.type === "text"
-              ? { ...s, [k]: next || undefined }
-              : s
-          );
+          store.shapes = store.shapes.map((s) => {
+            if (!store.selection.includes(s.id) || s.type !== "text") return s;
+            const upd: TextShape = { ...s, [k]: next || undefined };
+            if (s.runs?.length) upd.runs = s.runs.map((r) => ({ ...r, [k]: next || undefined }));
+            return upd;
+          });
         });
       }
     },
@@ -1490,7 +1554,7 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") return;
+      if (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable) return;
       const ctrl = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
@@ -1648,6 +1712,12 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
   // ---------- 样式应用 ----------
   const applyStyle = useCallback(
     (patch: Partial<Style>) => {
+      // 文本编辑中点色盘 = 给选区文字上色（行内级）
+      if (patch.color && tiptapRef.current) {
+        tiptapRef.current.chain().focus().setColor(colorHex(patch.color)).run();
+        setStyle((s) => ({ ...s, color: patch.color! }));
+        return;
+      }
       setStyle((s) => ({ ...s, ...patch }));
       const ids = store.selection;
       if (!ids.length) return;
@@ -1655,7 +1725,13 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
         store.shapes = store.shapes.map((s) => {
           if (!ids.includes(s.id) || s.type === "image") return s;
           const next: any = { ...s };
-          if (patch.color) next.color = patch.color;
+          if (patch.color) {
+            next.color = patch.color;
+            // 整块改色 = 统一颜色，清掉分段级覆盖
+            if (s.type === "text" && s.runs?.length) {
+              next.runs = s.runs.map((r) => ({ ...r, color: undefined }));
+            }
+          }
           if (patch.size) {
             if (s.type === "text") next.fontSize = FONT_PX[patch.size];
             else next.size = patch.size;
@@ -1684,45 +1760,58 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
       };
     }
   }
-  const [draft, setDraft] = useState("");
-  useEffect(() => {
-    if (!editing) return;
-    setDraft(editing.id ? ((store.getShape(editing.id) as TextShape | undefined)?.text ?? "") : "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing]);
-  const commitText = useCallback(() => {
-    const ed = editingRef.current;
-    if (!ed) return;
-    setEditing(null);
-    const text = draft;
-    if (ed.id) {
-      const s = store.getShape(ed.id) as TextShape | undefined;
-      if (!s) return;
-      if (!text.trim()) {
-        // 清空已有文本 = 删除
-        store.mutate(() => {
-          store.shapes = store.shapes.filter((sh) => sh.id !== ed.id);
-          store.selection = store.selection.filter((i) => i !== ed.id);
-        });
-      } else if (text !== s.text) {
-        store.mutate(() => {
-          store.shapes = store.shapes.map((sh) => (sh.id === ed.id ? { ...sh, text } : sh));
-        });
+  // TipTap 编辑器实例（编辑会话期间有效）；transaction 时刷新以联动样式面板高亮
+  const tiptapRef = useRef<TiptapEditor | null>(null);
+  const [, bumpEditor] = useReducer((x: number) => x + 1, 0);
+  const onEditorReady = useCallback((ed: TiptapEditor) => {
+    tiptapRef.current = ed;
+    ed.on("transaction", bumpEditor);
+    if (import.meta.env.DEV) (window as any).__nobiBoard.tiptap = ed;
+  }, []);
+
+  const commitText = useCallback(
+    (doc: unknown) => {
+      const ed = editingRef.current;
+      if (!ed) return; // blur 与 Esc 双触发时只提交一次
+      setEditing(null);
+      tiptapRef.current = null;
+      const runs = docToRuns(doc);
+      const text = runsToText(runs);
+      // 整块布尔与 runs 同步（全段一致才置位），面板/旧逻辑可继续依赖它们
+      const summary = {
+        bold: runs.length > 0 && runs.every((r) => r.bold) ? true : undefined,
+        italic: runs.length > 0 && runs.every((r) => r.italic) ? true : undefined,
+        underline: runs.length > 0 && runs.every((r) => r.underline) ? true : undefined,
+      };
+      if (ed.id) {
+        const s = store.getShape(ed.id);
+        if (!s || s.type !== "text") return;
+        if (!text.trim()) {
+          // 清空已有文本 = 删除
+          store.mutate(() => {
+            store.shapes = store.shapes.filter((sh) => sh.id !== ed.id);
+            store.selection = store.selection.filter((i) => i !== ed.id);
+          });
+        } else {
+          store.mutate(() => {
+            store.shapes = store.shapes.map((sh) =>
+              sh.id === ed.id && sh.type === "text" ? { ...sh, text, runs, ...summary } : sh
+            );
+          });
+        }
+      } else if (text.trim()) {
+        // 新建：有内容才落库，空文本不留任何痕迹
+        const st = styleRef.current;
+        store.createShapes([
+          {
+            id: newId(), type: "text", x: ed.x, y: ed.y, rotation: 0, opacity: 1,
+            text, runs, color: st.color, fontSize: FONT_PX[st.size], ...summary,
+          },
+        ]);
       }
-    } else if (text.trim()) {
-      // 新建：有内容才落库，空文本不留任何痕迹
-      const st = styleRef.current;
-      store.createShapes([
-        {
-          id: newId(), type: "text", x: ed.x, y: ed.y, rotation: 0, opacity: 1,
-          text, color: st.color, fontSize: FONT_PX[st.size],
-          bold: st.bold || undefined,
-          italic: st.italic || undefined,
-          underline: st.underline || undefined,
-        },
-      ]);
-    }
-  }, [store, draft]);
+    },
+    [store]
+  );
 
   // ---------- 渲染 ----------
   const sess = sessionRef.current;
@@ -1758,8 +1847,13 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
     : style.brush;
   const selTexts = selShapes.filter((s): s is TextShape => s.type === "text");
   const showTextStyle = tool === "text" || selTexts.length > 0 || !!editing;
-  const dispTS = (k: "bold" | "italic" | "underline") =>
-    selTexts.length ? selTexts.every((t) => !!t[k]) : !!style[k];
+  const dispTS = (k: "bold" | "italic" | "underline") => {
+    const ted = tiptapRef.current;
+    if (ted) return ted.isActive(k); // 编辑中：跟随光标/选区
+    return selTexts.length
+      ? selTexts.every((t) => (t.runs?.length ? t.runs.every((r) => !!r[k]) : !!t[k]))
+      : !!style[k];
+  };
 
   const previewDraw: DrawShape | null =
     sess?.mode === "draw"
@@ -1964,50 +2058,24 @@ export default function BoardCanvas({ onMount }: { onMount: (editor: Editor) => 
         </Layer>
       </Stage>
 
-      {/* 文本编辑覆盖层 */}
+      {/* 文本编辑覆盖层（TipTap 富文本，选中部分文字可单独改样式） */}
       {editingShape && editorPos && (
-        <textarea
-          className="bd-text-editor"
-          autoFocus
-          placeholder="输入文本"
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            e.target.style.height = "0";
-            e.target.style.height = `${e.target.scrollHeight}px`;
-          }}
-          onFocus={(e) => {
-            e.target.select();
-            e.target.style.height = "0";
-            e.target.style.height = `${e.target.scrollHeight}px`;
-          }}
-          onBlur={commitText}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
-              e.preventDefault();
-              commitText();
-            } else if (
-              (e.ctrlKey || e.metaKey) &&
-              ["b", "i", "u"].includes(e.key.toLowerCase())
-            ) {
-              // 编辑中也能切换加粗/斜体/下划线
-              e.preventDefault();
-              const k = e.key.toLowerCase();
-              toggleTextStyle(k === "b" ? "bold" : k === "i" ? "italic" : "underline");
-            }
-            e.stopPropagation();
-          }}
+        <TextEditorOverlay
+          key={editing?.id ?? "new"}
+          doc={shapeToDoc(editingShape)}
+          initMarks={{ bold: style.bold, italic: style.italic, underline: style.underline }}
+          onReady={onEditorReady}
+          onCommit={commitText}
           style={{
             left: editorPos.x,
             top: editorPos.y,
-            width: (editingShape.w ?? 320) * cam.z,
+            width: editingShape.w ? editingShape.w * cam.z : "max-content",
+            minWidth: 24,
+            maxWidth: editingShape.w ? undefined : 600 * cam.z,
             fontSize: editingShape.fontSize * cam.z,
             lineHeight: 1.35,
             color: colorHex(editingShape.color),
             fontFamily: FONT_FAMILY,
-            fontWeight: editingShape.bold ? 700 : 400,
-            fontStyle: editingShape.italic ? "italic" : "normal",
-            textDecoration: editingShape.underline ? "underline" : "none",
             textAlign: editingShape.align ?? "left",
             transform: `rotate(${editingShape.rotation}deg)`,
             transformOrigin: "left top",

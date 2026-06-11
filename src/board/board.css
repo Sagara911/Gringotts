@@ -464,6 +464,15 @@
 .bd-text-editor::placeholder {
   color: rgba(160, 160, 172, 0.45);
 }
+/* 富文本编辑层（TipTap/ProseMirror） */
+.bd-text-rich .ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bd-text-rich .ProseMirror p {
+  margin: 0;
+}
 .bd-text-editor {
   position: absolute;
   z-index: 4;

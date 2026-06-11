@@ -80,9 +80,19 @@ export interface ArrowShape extends ShapeBase {
   size: SizeKey;
 }
 
+/** 行内富文本分段：一段连续同样式的文字（text 内可含 \n 表示手动换行） */
+export interface RichRun {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string; // 覆盖 shape.color 的分段颜色
+}
+
 export interface TextShape extends ShapeBase {
   type: "text";
-  text: string;
+  text: string; // 纯文本冗余（由 runs 拼出；搜索/包围盒估算/旧版兼容用）
+  runs?: RichRun[]; // 行内富文本；无此字段时用整块样式（下面三个布尔）渲染
   color: string;
   fontSize: number;
   w?: number; // 换行宽度，无则自适应
