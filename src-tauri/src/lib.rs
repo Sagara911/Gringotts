@@ -21,6 +21,19 @@ mod search;
 mod settings;
 mod thumbs;
 
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::Manager;
+
+/// 显示并聚焦主窗（从托盘/还原时统一走这里：可能处于隐藏或最小化）
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -30,7 +43,40 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             collect::start_collect_server(app.handle().clone());
+
+            // 系统托盘：关窗收进托盘（后台采集/MCP 服务不中断），点图标还原
+            let show = MenuItem::with_id(app, "show", "显示 Nobi", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+            TrayIconBuilder::with_id("main")
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("Nobi")
+                .menu(&menu)
+                .show_menu_on_left_click(false) // 左键还原，右键才出菜单
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => show_main(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_main(tray.app_handle());
+                    }
+                })
+                .build(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 点窗口关闭按钮 = 收进托盘而非退出（真正退出走托盘菜单「退出」）
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             // library
