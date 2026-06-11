@@ -7,7 +7,7 @@ import { VirtuosoGrid } from "react-virtuoso";
 import type { IDockviewPanelProps } from "dockview";
 
 import type { AiCmd, Asset, Collection, Filter, SortKey } from "./types";
-import { COLOR_BUCKETS, isVideo } from "./utils";
+import { COLOR_BUCKETS, isAudio, isVideo } from "./utils";
 import Inspector from "./components/Inspector";
 import TagTree from "./components/TagTree";
 import Section from "./components/Section";
@@ -470,6 +470,12 @@ function GridPanel(p: IDockviewPanelProps) {
                       <span className="badge-video">▶</span>
                       <video src={convertFileSrc(a.path)} preload="metadata" muted />
                     </>
+                  ) : isAudio(a) ? (
+                    <div className="thumb-audio">
+                      <span className="badge-video">♪</span>
+                      <span className="thumb-audio-icon">♪</span>
+                      <span className="thumb-audio-fmt">{a.format}</span>
+                    </div>
                   ) : (
                     <img src={convertFileSrc(a.thumb || a.path)} loading="lazy" alt={a.name} />
                   )}

@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use tauri::Manager;
 use walkdir::WalkDir;
 
-use crate::db::{fetch_assets, now_secs, open_db, Asset, IMAGE_EXTS, VIDEO_EXTS};
+use crate::db::{fetch_assets, now_secs, open_db, Asset, AUDIO_EXTS, IMAGE_EXTS, VIDEO_EXTS};
 
 /// 递归扫描一个路径（文件或文件夹），图片入库。返回新增数量。
 fn scan_path(conn: &Connection, path: &str, now: i64) -> Result<usize, String> {
@@ -24,10 +24,14 @@ fn scan_path(conn: &Connection, path: &str, now: i64) -> Result<usize, String> {
             .and_then(|s| s.to_str())
             .map(|s| s.to_lowercase())
             .unwrap_or_default();
-        if !IMAGE_EXTS.contains(&ext.as_str()) && !VIDEO_EXTS.contains(&ext.as_str()) {
+        if !IMAGE_EXTS.contains(&ext.as_str())
+            && !VIDEO_EXTS.contains(&ext.as_str())
+            && !AUDIO_EXTS.contains(&ext.as_str())
+        {
             continue;
         }
 
+        // 音频/视频拿不到尺寸时落 0×0，前端按品类渲染占位
         let (w, h) = match imagesize::size(p) {
             Ok(sz) => (sz.width as i64, sz.height as i64),
             Err(_) => (0, 0),
@@ -128,7 +132,10 @@ pub fn import_blob(
         .and_then(|s| s.to_str())
         .map(|s| s.to_lowercase())
         .unwrap_or_default();
-    if !IMAGE_EXTS.contains(&ext.as_str()) && !VIDEO_EXTS.contains(&ext.as_str()) {
+    if !IMAGE_EXTS.contains(&ext.as_str())
+        && !VIDEO_EXTS.contains(&ext.as_str())
+        && !AUDIO_EXTS.contains(&ext.as_str())
+    {
         return Err(format!("不支持的格式：{ext}"));
     }
 

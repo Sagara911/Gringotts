@@ -21,7 +21,7 @@ import {
 import "dockview/dist/styles/dockview.css";
 
 import type { AiCmd, Asset, Collection, Filter, Menu, SortKey } from "./types";
-import { DOBBY_URL, REPO_URL, primaryBucket } from "./utils";
+import { DOBBY_URL, REPO_URL, isAudio, primaryBucket } from "./utils";
 import * as api from "./api";
 import { imageVector, textVector } from "./clip";
 import { addImages, type BoardEditor, type BoardImage } from "./Board";
@@ -328,7 +328,13 @@ function App() {
     });
   }
   function openBoardWith(list: Asset[]) {
-    pendingBoard.current.push(...list.map(toBoardImg));
+    // 音频没有画面，上画板只会得到一块永远加载不出的灰图——直接过滤
+    const visual = list.filter((a) => !isAudio(a));
+    if (!visual.length) {
+      setStatus("音频素材无法加入画板");
+      return;
+    }
+    pendingBoard.current.push(...visual.map(toBoardImg));
     ensurePanel("board", "画板");
     setTimeout(flushBoard, 80);
   }

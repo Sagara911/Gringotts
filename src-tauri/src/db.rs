@@ -40,7 +40,11 @@ pub const IMAGE_EXTS: &[&str] = &[
 ];
 /// 视频格式：可导入与播放预览；不做缩略图/配色/CLIP（webview 原生渲染首帧）
 pub const VIDEO_EXTS: &[&str] = &["mp4", "webm", "mov", "mkv", "avi"];
-pub const VIDEO_FORMATS_SQL: &str = "('MP4','WEBM','MOV','MKV','AVI')";
+/// 音频格式：可导入与播放预览（WebView2 原生解码）；同样不做缩略图/配色/CLIP
+pub const AUDIO_EXTS: &[&str] = &["mp3", "wav", "ogg", "flac", "m4a", "aac"];
+/// 跳过缩略图/配色/CLIP 管线的格式（视频+音频），供 SQL NOT IN 过滤
+pub const MEDIA_FORMATS_SQL: &str =
+    "('MP4','WEBM','MOV','MKV','AVI','MP3','WAV','OGG','FLAC','M4A','AAC')";
 
 fn db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

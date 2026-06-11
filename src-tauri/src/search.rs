@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 
-use crate::db::{open_db, VIDEO_FORMATS_SQL};
+use crate::db::{open_db, MEDIA_FORMATS_SQL};
 use crate::settings::embed_config;
 
 pub(crate) fn cosine(a: &[f32], b: &[f32]) -> f32 {
@@ -183,7 +183,7 @@ pub fn clip_targets(app: tauri::AppHandle) -> Result<Vec<ClipTarget>, String> {
         .prepare(&format!(
             "SELECT id, COALESCE(NULLIF(thumb,''), path) FROM assets
              WHERE (clip_embedding IS NULL OR clip_embedding='')
-             AND UPPER(COALESCE(format,'')) NOT IN {VIDEO_FORMATS_SQL}"
+             AND UPPER(COALESCE(format,'')) NOT IN {MEDIA_FORMATS_SQL}"
         ))
         .map_err(|e| e.to_string())?;
     let rows = stmt

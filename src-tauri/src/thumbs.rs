@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use tauri::Emitter;
 
-use crate::db::{open_db, thumbs_dir, VIDEO_FORMATS_SQL};
+use crate::db::{open_db, thumbs_dir, MEDIA_FORMATS_SQL};
 
 /// 从图像中提取主色调（量化到 8 级/通道，双轨选色）。
 /// 纯按像素数投票时，暗调图会被大面积深底霸榜，红发/烛光等小面积主题色进不了前五。
@@ -81,7 +81,7 @@ pub fn build_thumbnails(app: tauri::AppHandle) -> Result<usize, String> {
             .prepare(&format!(
                 "SELECT id,path,COALESCE(thumb,'') FROM assets
                  WHERE (thumb IS NULL OR thumb='' OR colors IS NULL OR colors='')
-                 AND UPPER(COALESCE(format,'')) NOT IN {VIDEO_FORMATS_SQL}"
+                 AND UPPER(COALESCE(format,'')) NOT IN {MEDIA_FORMATS_SQL}"
             ))
             .map_err(|e| e.to_string())?;
         let rows = stmt

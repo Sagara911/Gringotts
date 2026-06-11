@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { AiCmd, Asset } from "../types";
-import { humanSize, isVideo } from "../utils";
+import { humanSize, isAudio, isVideo } from "../utils";
 import Section from "./Section";
 
 export default function Inspector({
@@ -43,6 +43,11 @@ export default function Inspector({
     <section className="inspector">
       {isVideo(asset) ? (
         <video className="preview" src={convertFileSrc(asset.path)} controls muted loop />
+      ) : isAudio(asset) ? (
+        <div className="preview preview-audio">
+          <span className="preview-audio-icon">♪</span>
+          <audio src={convertFileSrc(asset.path)} controls preload="metadata" />
+        </div>
       ) : (
         <img className="preview" src={convertFileSrc(asset.path)} alt={asset.name} />
       )}
@@ -57,7 +62,8 @@ export default function Inspector({
         {asset.name}
       </h3>
       <div className="dim">
-        {asset.format} · {asset.width}×{asset.height} · {humanSize(asset.sizeBytes)}
+        {asset.format}
+        {asset.width > 0 ? ` · ${asset.width}×${asset.height}` : ""} · {humanSize(asset.sizeBytes)}
       </div>
 
       <Section k="insp-source" title="来源" variant="insp">

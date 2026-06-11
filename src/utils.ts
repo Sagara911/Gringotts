@@ -8,6 +8,9 @@ export const REPO_URL = "https://github.com/Sagara911/Nobi";
 const VIDEO_FORMATS = new Set(["MP4", "WEBM", "MOV", "MKV", "AVI"]);
 export const isVideo = (a: Asset) => VIDEO_FORMATS.has(a.format);
 
+const AUDIO_FORMATS = new Set(["MP3", "WAV", "OGG", "FLAC", "M4A", "AAC"]);
+export const isAudio = (a: Asset) => AUDIO_FORMATS.has(a.format);
+
 export function humanSize(bytes: number): string {
   if (!bytes) return "—";
   const u = ["B", "KB", "MB", "GB"];

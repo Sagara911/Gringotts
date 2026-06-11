@@ -372,6 +372,16 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 
+/* 音频卡片占位块（音频无画面，♪ + 格式名） */
+.thumb-audio {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px;
+  background: linear-gradient(160deg, #232328, #1a1a1e);
+}
+.thumb-audio-icon { font-size: 42px; color: #5d6070; line-height: 1; }
+.thumb-audio-fmt { font-size: 11px; color: var(--text-3); letter-spacing: 1px; }
+
 .fav-btn {
   position: absolute; top: 7px; right: 7px; z-index: 1;
   background: rgba(0, 0, 0, 0.45);
@@ -421,6 +431,14 @@ body {
   object-fit: contain; background: var(--surface-2);
 }
 video.preview { aspect-ratio: auto; max-height: 300px; }
+/* 详情面板音频播放器 */
+.preview-audio {
+  aspect-ratio: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 18px 10px;
+}
+.preview-audio-icon { font-size: 44px; color: #5d6070; line-height: 1; }
+.preview-audio audio { width: 100%; }
 .inspector h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; word-break: break-all; }
 .inspector .dim { color: var(--text-2); font-size: 12px; }
 .dim.path { font-size: 10px; word-break: break-all; margin-top: 6px; color: var(--text-3); }
