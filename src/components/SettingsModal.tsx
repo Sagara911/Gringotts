@@ -31,6 +31,12 @@ const AI_PRESETS: Record<string, AiCfg> = {
     aiKey: "",
     embedModel: "text-embedding-v3",
   },
+  "Google Gemini（需外网）": {
+    aiBase: "https://generativelanguage.googleapis.com/v1beta/openai",
+    aiModel: "gemini-2.0-flash",
+    aiKey: "",
+    embedModel: "text-embedding-004",
+  },
   OpenAI: {
     aiBase: "https://api.openai.com/v1",
     aiModel: "gpt-4o-mini",
