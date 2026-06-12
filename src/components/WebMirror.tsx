@@ -3,7 +3,7 @@
 // 与悬浮参考浮窗（RefWindow）同款窗体；内容区从"贴图片"换成"贴网页 iframe"，顶栏加地址栏。
 // 注意：部分站点用 X-Frame-Options/CSP 禁止被 iframe 嵌入，这类页会拒载——换能嵌的源即可。
 import { useRef, useState } from "react";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWebviewWindow, WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 import "./WebMirror.css";
 
@@ -37,6 +37,31 @@ export default function WebMirror() {
       if (u) localStorage.setItem(LS_KEY, u);
     } catch {
       /* 预览环境无 localStorage，忽略 */
+    }
+  };
+
+  // 兜底：iframe 被站点反嵌（X-Frame-Options/CSP）挡住白屏时用——开一个独立的带标题栏
+  // 小窗，整窗直接加载外链（真浏览器窗，绕过反嵌）。代价：没有窗内地址栏，靠系统标题栏
+  // 移动/关闭。仍带 web- 前缀，故老板键 Alt+` 一并能藏/恢复。
+  const openDirect = () => {
+    const u = normalizeUrl(input || url);
+    if (!u) return;
+    try {
+      localStorage.setItem(LS_KEY, u);
+    } catch {
+      /* ignore */
+    }
+    try {
+      new WebviewWindow(`web-d${Date.now()}`, {
+        url: u,
+        width: 480,
+        height: 320,
+        alwaysOnTop: true,
+        resizable: true,
+        title: "看球（直开外链）",
+      });
+    } catch {
+      /* 无 Tauri 运行时（纯浏览器预览）忽略 */
     }
   };
 
@@ -108,6 +133,14 @@ export default function WebMirror() {
         />
         <button className="wm-go" title="打开" onPointerDown={(e) => e.stopPropagation()} onClick={go}>
           ▶
+        </button>
+        <button
+          className="wm-go"
+          title="直开：此站被 iframe 反嵌挡住(白屏)时用——开独立窗整窗加载，绕过拦截；但没有窗内地址栏，靠系统标题栏移动/关闭"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={openDirect}
+        >
+          ↗
         </button>
         <input
           className="wm-opacity"
