@@ -3,6 +3,16 @@
 > 给任何接手发版的人/智能体（Codex、Claude 等）的完整流程。照顺序执行即可。
 > 当前发布渠道：GitHub Releases（自动更新依赖它）。
 
+## 发版会自动喂到哪（下游消费方）
+
+发一个 GitHub Release（setup.exe + latest.json）后，**两条下游全自动跟最新，无需额外操作**：
+
+1. **装机版自动更新器** —— 读 `releases/latest/download/latest.json`，老用户启动即提示升级。
+2. **Dobby 工具站的下载页**（另一个仓库 `Sagara911/Dobby` 的 `nobi.html`，线上 `dobby-aih.pages.dev/nobi.html`）
+   —— 运行时调 GitHub API 取 `releases/latest`，下载按钮自动指向最新 `*-setup.exe`。**Nobi 发新版后 Dobby 那边不用动**。
+   - 注意：若**改了打包格式/命名**（不再是 Tauri 默认的 `nobi_<版本>_x64-setup.exe`），要同步改 Dobby `nobi.html` 里的资产匹配正则 `/-setup\.exe$/i`，否则下载页认不出安装包。
+   - Dobby `nobi.html` 还有个断网兜底直链常量 `FALLBACK_EXE` 写死了某版，偶尔需手动 bump（不影响正常 API 路径）。
+
 ## 前置认知（30 秒）
 
 - 安装包由 NSIS 打出，**用户只需要 setup.exe 一个文件**
