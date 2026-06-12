@@ -63,6 +63,73 @@ export interface ClipTarget {
   img: string;
 }
 
+export type TranslationMode = "normal" | "art_terms" | "prompt" | "tags";
+export type TranslationProvider = "auto" | "builtin" | "model";
+
+export interface TranslationRequest {
+  text: string;
+  sourceLang?: string;
+  targetLang?: string;
+  mode?: TranslationMode;
+  provider?: TranslationProvider;
+  sourceApp?: string;
+  sourceUrl?: string;
+  assetId?: number;
+  saveHistory?: boolean;
+}
+
+export interface GlossaryHit {
+  source: string;
+  target: string;
+  explanation: string;
+  category: string;
+}
+
+export interface TranslationResult {
+  id?: number;
+  sourceText: string;
+  targetText: string;
+  sourceLang: string;
+  targetLang: string;
+  mode: string;
+  provider: string;
+  usedGlossary: GlossaryHit[];
+  keywords: string[];
+  warning?: string;
+}
+
+export interface GlossaryTerm {
+  id: number;
+  source: string;
+  target: string;
+  explanation: string;
+  category: string;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  useCount: number;
+}
+
+export interface GlossaryTermInput {
+  id?: number;
+  source: string;
+  target: string;
+  explanation?: string;
+  category?: string;
+  tags?: string[];
+}
+
+export interface TranslationHistoryItem {
+  id: number;
+  sourceText: string;
+  targetText: string;
+  sourceLang: string;
+  targetLang: string;
+  mode: string;
+  provider: string;
+  createdAt: number;
+}
+
 export interface MenuItem {
   label?: string;
   action?: () => void;

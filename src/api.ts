@@ -5,7 +5,19 @@
 // ============================================================
 
 import { invoke } from "@tauri-apps/api/core";
-import type { AiCfg, AiCmd, AiStatus, Asset, ClipTarget, Collection } from "./types";
+import type {
+  AiCfg,
+  AiCmd,
+  AiStatus,
+  Asset,
+  ClipTarget,
+  Collection,
+  GlossaryTerm,
+  GlossaryTermInput,
+  TranslationHistoryItem,
+  TranslationRequest,
+  TranslationResult,
+} from "./types";
 
 // ---- 看球直开窗 ----
 export const webOpenDirect = (url: string) => invoke<void>("web_open_direct", { url });
@@ -86,6 +98,16 @@ export const collectionAssetIds = (id: number) =>
 // ---- 设置 ----
 export const getSettings = () => invoke<AiCfg>("get_settings");
 export const setSettings = (settings: AiCfg) => invoke<void>("set_settings", { settings });
+
+// ---- 翻译 / 术语库 ----
+export const translateText = (req: TranslationRequest) =>
+  invoke<TranslationResult>("translate_text", { req });
+export const listGlossaryTerms = () => invoke<GlossaryTerm[]>("list_glossary_terms");
+export const saveGlossaryTerm = (term: GlossaryTermInput) =>
+  invoke<number>("save_glossary_term", { term });
+export const deleteGlossaryTerm = (id: number) => invoke<void>("delete_glossary_term", { id });
+export const listTranslationHistory = (limit = 30) =>
+  invoke<TranslationHistoryItem[]>("list_translation_history", { limit });
 
 // ---- 画板（快照权威副本在 SQLite，localStorage 只是快取；多画板） ----
 export interface BoardMeta {

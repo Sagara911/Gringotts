@@ -20,6 +20,7 @@ mod mcp_api;
 mod search;
 mod settings;
 mod thumbs;
+mod translation;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -1049,6 +1050,12 @@ pub fn run() {
             // settings
             settings::get_settings,
             settings::set_settings,
+            // translation
+            translation::translate_text,
+            translation::list_glossary_terms,
+            translation::save_glossary_term,
+            translation::delete_glossary_term,
+            translation::list_translation_history,
             // board
             board::list_boards,
             board::create_board,

@@ -217,6 +217,21 @@ pub fn handle_api(app: &tauri::AppHandle, method: &str, url: &str, body: &str) -
             }
         }
 
+        ("POST", "/api/translate") => {
+            let req_value = parsed.get("req").cloned().unwrap_or(parsed.clone());
+            let req: crate::translation::TranslationRequest = match serde_json::from_value(req_value) {
+                Ok(r) => r,
+                Err(e) => return json_err(400, &format!("bad translation request: {e}")),
+            };
+            match tauri::async_runtime::block_on(crate::translation::translate_text(
+                app.clone(),
+                req,
+            )) {
+                Ok(result) => json_ok(serde_json::json!({ "ok": true, "result": result })),
+                Err(e) => json_err(500, &e),
+            }
+        }
+
         ("GET", "/api/boards") => match crate::board::list_boards(app.clone()) {
             Ok(b) => json_ok(serde_json::json!({ "ok": true, "boards": b })),
             Err(e) => json_err(500, &e),

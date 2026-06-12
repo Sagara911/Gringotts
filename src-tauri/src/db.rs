@@ -103,6 +103,54 @@ pub fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
             asset_id INTEGER NOT NULL,
             added_at INTEGER,
             PRIMARY KEY (collection_id, asset_id)
+        );
+        CREATE TABLE IF NOT EXISTS glossary_terms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            target TEXT NOT NULL,
+            explanation TEXT,
+            category TEXT,
+            tags TEXT,
+            created_at INTEGER,
+            updated_at INTEGER,
+            use_count INTEGER DEFAULT 0
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_glossary_source_target
+            ON glossary_terms(source, target);
+        CREATE TABLE IF NOT EXISTS translation_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            target_lang TEXT,
+            prompt TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at INTEGER,
+            updated_at INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS translation_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_app TEXT,
+            source_url TEXT,
+            page_title TEXT,
+            asset_id INTEGER,
+            created_at INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS translation_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_text TEXT NOT NULL,
+            target_text TEXT NOT NULL,
+            source_lang TEXT,
+            target_lang TEXT,
+            mode TEXT,
+            provider TEXT,
+            summary TEXT,
+            keywords TEXT,
+            terms TEXT,
+            source_app TEXT,
+            source_url TEXT,
+            asset_id INTEGER,
+            created_at INTEGER
         );",
     )
     .map_err(|e| e.to_string())?;

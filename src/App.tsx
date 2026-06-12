@@ -30,6 +30,7 @@ import MenuBar from "./components/MenuBar";
 import SettingsModal from "./components/SettingsModal";
 import CmdManagerModal from "./components/CmdManagerModal";
 import WebTVModal from "./components/WebTVModal";
+import TranslationModal from "./components/TranslationModal";
 import UpdateModal from "./components/UpdateModal";
 import ImageViewer from "./components/ImageViewer";
 import { buildContactSheetPdf, bytesToB64 } from "./contactSheet";
@@ -70,6 +71,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCmdMgr, setShowCmdMgr] = useState(false);
   const [showWebTV, setShowWebTV] = useState(false); // 看球入口弹窗（输网址→直开置顶小窗）
+  const [showTranslation, setShowTranslation] = useState(false);
   // 看球搜索引擎（Alt+E 换台与入口弹窗共用）；前端存 localStorage，Rust 侧由命令同步持久化
   const [webEngine, setWebEngine] = useState(() => {
     try {
@@ -1085,6 +1087,7 @@ function App() {
       items: [
         { label: "画板", action: () => ensurePanel("board", "画板") },
         { label: "📺 看球小窗…", action: () => setShowWebTV(true) },
+        { label: "翻译实验室…", action: () => setShowTranslation(true) },
         { label: "Dobby 工具站", action: () => openUrl(DOBBY_URL) },
         { sep: true },
         { label: "导出浏览器采集插件…", action: exportExtMenu },
@@ -1219,6 +1222,8 @@ function App() {
       {showWebTV && (
         <WebTVModal onClose={() => setShowWebTV(false)} engine={webEngine} onEngine={pickWebEngine} />
       )}
+
+      {showTranslation && <TranslationModal onClose={() => setShowTranslation(false)} />}
 
       {update && (
         <UpdateModal
