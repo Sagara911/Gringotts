@@ -61,6 +61,7 @@ function App() {
   const [viewer, setViewer] = useState<{ list: Asset[]; index: number } | null>(null);
   const [modelViewer, setModelViewer] = useState<Asset | null>(null);
   const refSeq = useRef(0); // 悬浮参考浮窗的唯一 label 序号
+  const webSeq = useRef(0); // 看球镜像小窗的唯一 label 序号
   const ctxRef = useRef<HTMLDivElement | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
   // 当前合集筛选下的成员 id（filter.kind==="collection" 时由 matchesFilter 用）
@@ -997,6 +998,33 @@ function App() {
     win.once("tauri://error", (e) => setStatus(`悬浮窗打开失败：${JSON.stringify(e.payload)}`));
   }
 
+  // 看球镜像小窗：把一个网页"拉到桌面"——同款无边框/透明/置顶小窗，内容是网页 iframe + 地址栏。
+  // 记住上次看的网址，下次开窗直接带上。
+  function openWebMirror() {
+    let last = "";
+    try {
+      last = localStorage.getItem("nobi.webmirror.url") || "";
+    } catch {
+      /* ignore */
+    }
+    const params = new URLSearchParams();
+    if (last) params.set("u", last);
+    const label = `web-${webSeq.current++}`;
+    const win = new WebviewWindow(label, {
+      url: `index.html#web?${params.toString()}`,
+      width: 480,
+      height: 300,
+      decorations: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: true,
+      shadow: false,
+      title: "看球小窗",
+    });
+    win.once("tauri://error", (e) => setStatus(`看球小窗打开失败：${JSON.stringify(e.payload)}`));
+  }
+
   // 看图/练习浮层：多选时拿选中的当播放列表（练 gesture），否则用当前过滤列表。
   // 3D 模型路由到 ModelViewer；音频/视频没有静态画面，不进看图浮层。
   function openViewer(id: number) {
@@ -1058,6 +1086,7 @@ function App() {
       title: "工具(T)",
       items: [
         { label: "画板", action: () => ensurePanel("board", "画板") },
+        { label: "📺 看球小窗…", action: openWebMirror },
         { label: "Dobby 工具站", action: () => openUrl(DOBBY_URL) },
         { sep: true },
         { label: "导出浏览器采集插件…", action: exportExtMenu },

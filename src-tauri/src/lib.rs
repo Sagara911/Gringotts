@@ -34,6 +34,25 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// 看球小窗老板键：按一下把所有 web-* 窗藏起来，再按一下全部恢复。
+/// 任一窗当前可见即视为「显示中」→ 全藏；否则 → 全显。
+#[cfg(desktop)]
+fn toggle_web_windows(app: &tauri::AppHandle) {
+    let wins: Vec<_> = app
+        .webview_windows()
+        .into_iter()
+        .filter(|(label, _)| label.starts_with("web-"))
+        .map(|(_, w)| w)
+        .collect();
+    if wins.is_empty() {
+        return;
+    }
+    let any_visible = wins.iter().any(|w| w.is_visible().unwrap_or(false));
+    for w in wins {
+        let _ = if any_visible { w.hide() } else { w.show() };
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -43,6 +62,27 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             collect::start_collect_server(app.handle().clone());
+
+            // 看球小窗老板键：全局快捷键 Alt+`（两键、单手、Windows 上基本无冲突）。
+            // Rust 侧注册——不经 IPC，故无需 capabilities 授权；按下切所有 web-* 窗显隐。
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_global_shortcut::{
+                    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+                };
+                let boss = Shortcut::new(Some(Modifiers::ALT), Code::Backquote);
+                app.handle().plugin(
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_handler(move |app, shortcut, event| {
+                            if shortcut == &boss && event.state() == ShortcutState::Pressed {
+                                toggle_web_windows(app);
+                            }
+                        })
+                        .build(),
+                )?;
+                // 注册失败（如该键已被他程序占用）不致整个 app 起不来，只是老板键不生效
+                let _ = app.global_shortcut().register(boss);
+            }
 
             // 系统托盘：关窗收进托盘（后台采集/MCP 服务不中断），点图标还原
             let show = MenuItem::with_id(app, "show", "显示 Nobi", true, None::<&str>)?;
