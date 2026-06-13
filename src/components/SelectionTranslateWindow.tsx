@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { LogicalSize } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { SelectionTranslatePayload, TranslationResult } from "../types";
 import * as api from "../api";
+import {
+  SELECTION_TRANSLATE_BUSY_SIZE,
+  SELECTION_TRANSLATE_CHIP_SIZE,
+  SELECTION_TRANSLATE_PANEL_SIZE,
+  selectionTranslatePosition,
+} from "../selectionTranslatePosition";
 import "./SelectionTranslateWindow.css";
 
 const STORAGE_KEY = "nobi.selectionTranslate.payload";
-const CHIP_SIZE = new LogicalSize(116, 40);
-const PANEL_SIZE = new LogicalSize(420, 310);
-const BUSY_SIZE = new LogicalSize(400, 210);
 
 type WindowPayload = SelectionTranslatePayload & {
   openPanel?: boolean;
@@ -47,7 +49,9 @@ export default function SelectionTranslateWindow() {
       setResult(null);
       setMessage("");
       setBusy(false);
-      void win().setSize(e.payload.openPanel ? PANEL_SIZE : CHIP_SIZE);
+      void win().setSize(
+        e.payload.openPanel ? SELECTION_TRANSLATE_PANEL_SIZE : SELECTION_TRANSLATE_CHIP_SIZE,
+      );
     });
     return () => {
       un.then((f) => f());
@@ -73,27 +77,24 @@ export default function SelectionTranslateWindow() {
   useEffect(() => {
     if (!expanded) return;
 
-    let armed = false;
     let unlisten: (() => void) | undefined;
-    const armTimer = window.setTimeout(() => {
-      armed = true;
-    }, 180);
-    const closeIfArmed = () => {
-      if (armed) void closeWindow();
-    };
-
     void win()
       .onFocusChanged((e) => {
-        if (!e.payload) closeIfArmed();
+        if (e.payload) return;
+        window.setTimeout(() => {
+          void win()
+            .isFocused()
+            .then((focused) => {
+              if (!focused) void closeWindow();
+            })
+            .catch(() => {});
+        }, 120);
       })
       .then((un) => {
         unlisten = un;
       });
-    window.addEventListener("blur", closeIfArmed);
 
     return () => {
-      window.clearTimeout(armTimer);
-      window.removeEventListener("blur", closeIfArmed);
       unlisten?.();
     };
   }, [expanded]);
@@ -117,12 +118,20 @@ export default function SelectionTranslateWindow() {
     void win().startDragging();
   }
 
+  async function placeWindow(size = SELECTION_TRANSLATE_PANEL_SIZE) {
+    if (!payload) return;
+    await win()
+      .setPosition(await selectionTranslatePosition(payload.x, payload.y, size))
+      .catch(() => {});
+  }
+
   async function runTranslate() {
     if (!text || busy) return;
     setBusy(true);
     setMessage("");
     setResult(null);
-    await win().setSize(BUSY_SIZE).catch(() => {});
+    await placeWindow(SELECTION_TRANSLATE_BUSY_SIZE);
+    await win().setSize(SELECTION_TRANSLATE_BUSY_SIZE).catch(() => {});
     try {
       const r = await api.translateText({
         text,
@@ -138,10 +147,12 @@ export default function SelectionTranslateWindow() {
           ? "当前模型不可用，下面是内置术语参考，不是完整翻译。"
           : r.warning || "",
       );
-      await win().setSize(PANEL_SIZE).catch(() => {});
+      await placeWindow(SELECTION_TRANSLATE_PANEL_SIZE);
+      await win().setSize(SELECTION_TRANSLATE_PANEL_SIZE).catch(() => {});
     } catch (e) {
       setMessage(`翻译服务不可用：${e}`);
-      await win().setSize(BUSY_SIZE).catch(() => {});
+      await placeWindow(SELECTION_TRANSLATE_BUSY_SIZE);
+      await win().setSize(SELECTION_TRANSLATE_BUSY_SIZE).catch(() => {});
     } finally {
       setBusy(false);
     }
@@ -150,7 +161,8 @@ export default function SelectionTranslateWindow() {
   async function expandAndTranslate() {
     if (!text || busy) return;
     setExpanded(true);
-    await win().setSize(BUSY_SIZE).catch(() => {});
+    await placeWindow(SELECTION_TRANSLATE_BUSY_SIZE);
+    await win().setSize(SELECTION_TRANSLATE_BUSY_SIZE).catch(() => {});
     await win().setFocus().catch(() => {});
     void runTranslate();
   }

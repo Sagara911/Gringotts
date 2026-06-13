@@ -9,7 +9,6 @@ import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { emitTo } from "@tauri-apps/api/event";
-import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
 import { getVersion } from "@tauri-apps/api/app";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { check as checkUpdate, type Update } from "@tauri-apps/plugin-updater";
@@ -44,6 +43,10 @@ import TranslationModal from "./components/TranslationModal";
 import UpdateModal from "./components/UpdateModal";
 import ImageViewer from "./components/ImageViewer";
 import { buildContactSheetPdf, bytesToB64 } from "./contactSheet";
+import {
+  SELECTION_TRANSLATE_CHIP_SIZE,
+  selectionTranslatePosition,
+} from "./selectionTranslatePosition";
 import "./App.css";
 
 const DOCK_KEY = "nobi-dock-v1";
@@ -187,8 +190,12 @@ function App() {
       }
 
       const send = async (win: WebviewWindow) => {
-        await win.setSize(new LogicalSize(116, 40)).catch(() => {});
-        await win.setPosition(new PhysicalPosition(payload.x + 12, payload.y + 12)).catch(() => {});
+        await win.setSize(SELECTION_TRANSLATE_CHIP_SIZE).catch(() => {});
+        await win
+          .setPosition(
+            await selectionTranslatePosition(payload.x, payload.y, SELECTION_TRANSLATE_CHIP_SIZE),
+          )
+          .catch(() => {});
         await win.show().catch(() => {});
         await emitTo(label, "selection-translate-payload", saved).catch(() => {});
       };
@@ -202,8 +209,8 @@ function App() {
       const win = new WebviewWindow(label, {
         url: "index.html#selection-translate",
         title: "Nobi 翻译",
-        width: 116,
-        height: 40,
+        width: SELECTION_TRANSLATE_CHIP_SIZE.width,
+        height: SELECTION_TRANSLATE_CHIP_SIZE.height,
         minWidth: 96,
         minHeight: 40,
         decorations: false,
