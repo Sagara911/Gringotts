@@ -70,6 +70,34 @@ export default function SelectionTranslateWindow() {
     return () => window.clearTimeout(timer);
   }, [expanded, text]);
 
+  useEffect(() => {
+    if (!expanded) return;
+
+    let armed = false;
+    let unlisten: (() => void) | undefined;
+    const armTimer = window.setTimeout(() => {
+      armed = true;
+    }, 180);
+    const closeIfArmed = () => {
+      if (armed) void closeWindow();
+    };
+
+    void win()
+      .onFocusChanged((e) => {
+        if (!e.payload) closeIfArmed();
+      })
+      .then((un) => {
+        unlisten = un;
+      });
+    window.addEventListener("blur", closeIfArmed);
+
+    return () => {
+      window.clearTimeout(armTimer);
+      window.removeEventListener("blur", closeIfArmed);
+      unlisten?.();
+    };
+  }, [expanded]);
+
   async function closeWindow() {
     const current = win();
     try {
