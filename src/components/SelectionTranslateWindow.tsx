@@ -165,15 +165,15 @@ export default function SelectionTranslateWindow() {
       const r = await api.translateText({
         text,
         targetLang: "zh-CN",
-        mode: "art_terms",
+        mode: "normal",
         provider: "auto",
         sourceApp: payload?.sourceApp || "system-selection",
         saveHistory: true,
       });
       setResult(r);
       setMessage(
-        r.provider === "builtin-fallback"
-          ? "当前模型不可用，下面是内置术语参考，不是完整翻译。"
+        r.provider === "offline-fallback"
+          ? "在线翻译不可用，已使用离线基础翻译。"
           : r.warning || "",
       );
       await placeWindow(SELECTION_TRANSLATE_PANEL_SIZE);

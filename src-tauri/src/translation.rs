@@ -85,85 +85,435 @@ pub struct TranslationHistoryItem {
     pub created_at: i64,
 }
 
-struct SeedTerm {
+struct OfflineEntry {
     source: &'static str,
     target: &'static str,
-    explanation: &'static str,
-    category: &'static str,
 }
 
-const BUILTIN_TERMS: &[SeedTerm] = &[
-    SeedTerm {
-        source: "roughness",
-        target: "粗糙度",
-        explanation: "PBR 材质里控制高光扩散程度，值越高反射越散、越哑光。",
-        category: "材质",
+const OFFLINE_DICTIONARY: &[OfflineEntry] = &[
+    OfflineEntry {
+        source: "hello",
+        target: "你好",
     },
-    SeedTerm {
-        source: "albedo",
-        target: "反照率 / 基础色",
-        explanation: "材质不含光照影响的固有颜色，常对应 base color 贴图。",
-        category: "材质",
+    OfflineEntry {
+        source: "hi",
+        target: "你好",
     },
-    SeedTerm {
-        source: "base color",
-        target: "基础色",
-        explanation: "PBR 工作流里的颜色贴图，通常不包含阴影和高光。",
-        category: "材质",
+    OfflineEntry {
+        source: "thanks",
+        target: "谢谢",
     },
-    SeedTerm {
-        source: "normal map",
-        target: "法线贴图",
-        explanation: "用 RGB 编码表面法线方向，在低模上模拟细节起伏。",
-        category: "贴图",
+    OfflineEntry {
+        source: "thank",
+        target: "谢谢",
     },
-    SeedTerm {
-        source: "ambient occlusion",
-        target: "环境光遮蔽",
-        explanation: "表现缝隙、接触处的间接光遮挡，常简称 AO。",
-        category: "贴图",
+    OfflineEntry {
+        source: "you",
+        target: "你",
     },
-    SeedTerm {
-        source: "subsurface scattering",
-        target: "次表面散射",
-        explanation: "光进入半透明材质内部后散射再透出，常用于皮肤、玉、蜡。",
-        category: "材质",
+    OfflineEntry {
+        source: "your",
+        target: "你的",
     },
-    SeedTerm {
-        source: "retopology",
-        target: "重拓扑",
-        explanation: "重新整理模型布线，让网格更适合动画、雕刻细化或游戏实时渲染。",
-        category: "建模",
+    OfflineEntry {
+        source: "i",
+        target: "我",
     },
-    SeedTerm {
-        source: "rigging",
-        target: "绑定",
-        explanation: "为模型建立骨骼、控制器和权重，使其可以被动画驱动。",
-        category: "动画",
+    OfflineEntry {
+        source: "my",
+        target: "我的",
     },
-    SeedTerm {
-        source: "bevel",
-        target: "倒角",
-        explanation: "给硬边增加小圆角或斜面，让边缘更真实地吃光。",
-        category: "建模",
+    OfflineEntry {
+        source: "we",
+        target: "我们",
     },
-    SeedTerm {
-        source: "uv unwrapping",
-        target: "UV 展开",
-        explanation: "把三维模型表面展开到二维坐标，供贴图绘制和采样。",
-        category: "贴图",
+    OfflineEntry {
+        source: "they",
+        target: "他们",
     },
-    SeedTerm {
-        source: "metallic",
-        target: "金属度",
-        explanation: "PBR 材质中控制表面按金属还是非金属方式反射光线。",
-        category: "材质",
+    OfflineEntry {
+        source: "he",
+        target: "他",
     },
-    SeedTerm {
-        source: "specular",
-        target: "镜面反射",
-        explanation: "控制表面高光和反射相关表现，不同工作流含义略有差异。",
-        category: "材质",
+    OfflineEntry {
+        source: "she",
+        target: "她",
+    },
+    OfflineEntry {
+        source: "it",
+        target: "它",
+    },
+    OfflineEntry {
+        source: "this",
+        target: "这个",
+    },
+    OfflineEntry {
+        source: "that",
+        target: "那个",
+    },
+    OfflineEntry {
+        source: "these",
+        target: "这些",
+    },
+    OfflineEntry {
+        source: "those",
+        target: "那些",
+    },
+    OfflineEntry {
+        source: "is",
+        target: "是",
+    },
+    OfflineEntry {
+        source: "are",
+        target: "是",
+    },
+    OfflineEntry {
+        source: "was",
+        target: "曾是",
+    },
+    OfflineEntry {
+        source: "were",
+        target: "曾是",
+    },
+    OfflineEntry {
+        source: "be",
+        target: "是",
+    },
+    OfflineEntry {
+        source: "have",
+        target: "有",
+    },
+    OfflineEntry {
+        source: "has",
+        target: "有",
+    },
+    OfflineEntry {
+        source: "had",
+        target: "有过",
+    },
+    OfflineEntry {
+        source: "do",
+        target: "做",
+    },
+    OfflineEntry {
+        source: "does",
+        target: "做",
+    },
+    OfflineEntry {
+        source: "did",
+        target: "做过",
+    },
+    OfflineEntry {
+        source: "not",
+        target: "不",
+    },
+    OfflineEntry {
+        source: "no",
+        target: "不",
+    },
+    OfflineEntry {
+        source: "yes",
+        target: "是",
+    },
+    OfflineEntry {
+        source: "and",
+        target: "和",
+    },
+    OfflineEntry {
+        source: "or",
+        target: "或",
+    },
+    OfflineEntry {
+        source: "but",
+        target: "但是",
+    },
+    OfflineEntry {
+        source: "because",
+        target: "因为",
+    },
+    OfflineEntry {
+        source: "so",
+        target: "所以",
+    },
+    OfflineEntry {
+        source: "if",
+        target: "如果",
+    },
+    OfflineEntry {
+        source: "then",
+        target: "然后",
+    },
+    OfflineEntry {
+        source: "for",
+        target: "为了",
+    },
+    OfflineEntry {
+        source: "from",
+        target: "来自",
+    },
+    OfflineEntry {
+        source: "to",
+        target: "到",
+    },
+    OfflineEntry {
+        source: "in",
+        target: "在",
+    },
+    OfflineEntry {
+        source: "on",
+        target: "在",
+    },
+    OfflineEntry {
+        source: "with",
+        target: "和",
+    },
+    OfflineEntry {
+        source: "without",
+        target: "没有",
+    },
+    OfflineEntry {
+        source: "about",
+        target: "关于",
+    },
+    OfflineEntry {
+        source: "can",
+        target: "可以",
+    },
+    OfflineEntry {
+        source: "could",
+        target: "可以",
+    },
+    OfflineEntry {
+        source: "will",
+        target: "将会",
+    },
+    OfflineEntry {
+        source: "would",
+        target: "会",
+    },
+    OfflineEntry {
+        source: "should",
+        target: "应该",
+    },
+    OfflineEntry {
+        source: "need",
+        target: "需要",
+    },
+    OfflineEntry {
+        source: "want",
+        target: "想要",
+    },
+    OfflineEntry {
+        source: "make",
+        target: "制作",
+    },
+    OfflineEntry {
+        source: "create",
+        target: "创建",
+    },
+    OfflineEntry {
+        source: "use",
+        target: "使用",
+    },
+    OfflineEntry {
+        source: "work",
+        target: "工作",
+    },
+    OfflineEntry {
+        source: "test",
+        target: "测试",
+    },
+    OfflineEntry {
+        source: "testing",
+        target: "测试",
+    },
+    OfflineEntry {
+        source: "improve",
+        target: "改进",
+    },
+    OfflineEntry {
+        source: "improvement",
+        target: "改进",
+    },
+    OfflineEntry {
+        source: "start",
+        target: "开始",
+    },
+    OfflineEntry {
+        source: "stop",
+        target: "停止",
+    },
+    OfflineEntry {
+        source: "open",
+        target: "打开",
+    },
+    OfflineEntry {
+        source: "close",
+        target: "关闭",
+    },
+    OfflineEntry {
+        source: "save",
+        target: "保存",
+    },
+    OfflineEntry {
+        source: "copy",
+        target: "复制",
+    },
+    OfflineEntry {
+        source: "select",
+        target: "选择",
+    },
+    OfflineEntry {
+        source: "all",
+        target: "全部",
+    },
+    OfflineEntry {
+        source: "first",
+        target: "首先",
+    },
+    OfflineEntry {
+        source: "last",
+        target: "最后",
+    },
+    OfflineEntry {
+        source: "small",
+        target: "小的",
+    },
+    OfflineEntry {
+        source: "big",
+        target: "大的",
+    },
+    OfflineEntry {
+        source: "new",
+        target: "新的",
+    },
+    OfflineEntry {
+        source: "old",
+        target: "旧的",
+    },
+    OfflineEntry {
+        source: "good",
+        target: "好的",
+    },
+    OfflineEntry {
+        source: "bad",
+        target: "坏的",
+    },
+    OfflineEntry {
+        source: "fast",
+        target: "快的",
+    },
+    OfflineEntry {
+        source: "slow",
+        target: "慢的",
+    },
+    OfflineEntry {
+        source: "right",
+        target: "正确的",
+    },
+    OfflineEntry {
+        source: "wrong",
+        target: "错误的",
+    },
+    OfflineEntry {
+        source: "problem",
+        target: "问题",
+    },
+    OfflineEntry {
+        source: "issue",
+        target: "问题",
+    },
+    OfflineEntry {
+        source: "error",
+        target: "错误",
+    },
+    OfflineEntry {
+        source: "result",
+        target: "结果",
+    },
+    OfflineEntry {
+        source: "text",
+        target: "文本",
+    },
+    OfflineEntry {
+        source: "translation",
+        target: "翻译",
+    },
+    OfflineEntry {
+        source: "translate",
+        target: "翻译",
+    },
+    OfflineEntry {
+        source: "language",
+        target: "语言",
+    },
+    OfflineEntry {
+        source: "online",
+        target: "在线",
+    },
+    OfflineEntry {
+        source: "offline",
+        target: "离线",
+    },
+    OfflineEntry {
+        source: "network",
+        target: "网络",
+    },
+    OfflineEntry {
+        source: "page",
+        target: "页面",
+    },
+    OfflineEntry {
+        source: "window",
+        target: "窗口",
+    },
+    OfflineEntry {
+        source: "button",
+        target: "按钮",
+    },
+    OfflineEntry {
+        source: "menu",
+        target: "菜单",
+    },
+    OfflineEntry {
+        source: "file",
+        target: "文件",
+    },
+    OfflineEntry {
+        source: "image",
+        target: "图片",
+    },
+    OfflineEntry {
+        source: "video",
+        target: "视频",
+    },
+    OfflineEntry {
+        source: "audio",
+        target: "音频",
+    },
+    OfflineEntry {
+        source: "game",
+        target: "游戏",
+    },
+    OfflineEntry {
+        source: "development",
+        target: "开发",
+    },
+    OfflineEntry {
+        source: "confidence",
+        target: "信心",
+    },
+    OfflineEntry {
+        source: "come",
+        target: "到来",
+    },
+    OfflineEntry {
+        source: "comes",
+        target: "到来",
+    },
+    OfflineEntry {
+        source: "prototype",
+        target: "原型",
     },
 ];
 
@@ -180,7 +530,7 @@ fn clean_lang(s: Option<String>, fallback: &str) -> String {
 fn clean_mode(s: Option<String>) -> String {
     let mode = s.unwrap_or_default();
     match mode.as_str() {
-        "art_terms" | "prompt" | "tags" => mode,
+        "prompt" | "tags" => mode,
         _ => "normal".to_string(),
     }
 }
@@ -213,14 +563,15 @@ fn prompt_for(
     hits: &[GlossaryHit],
 ) -> String {
     let mode_hint = match mode {
-        "art_terms" => "重点解释美术、设计、3D、材质、动画、摄影相关术语。输出：翻译 + 术语解释。",
         "prompt" => {
-            "把内容翻译成适合 AI 绘图/素材检索的 prompt。保留关键英文术语，并给出可直接复制的版本。"
+            "Translate into a clear prompt that can be copied directly. Keep necessary proper nouns and do not add extra content."
         }
         "tags" => {
-            "翻译并提取 6-12 个短标签。标签应适合素材管理，输出中文为主，必要时保留英文术语。"
+            "Translate and extract 6 to 12 short, general-purpose tags. Keep proper nouns when needed."
         }
-        _ => "自然、准确地翻译。遇到专业术语时简短解释，不要过度展开。",
+        _ => {
+            "Translate directly, naturally, and accurately like a common online translation tool. Output only the translation."
+        }
     };
     let glossary = if hits.is_empty() {
         String::new()
@@ -230,12 +581,12 @@ fn prompt_for(
             .map(|h| format!("- {} = {} ({})", h.source, h.target, h.explanation))
             .collect::<Vec<_>>()
             .join("\n");
-        format!("\n术语库优先采用：\n{lines}\n")
+        format!("\nPreferred custom glossary terms:\n{lines}\n")
     };
     format!(
-        "你是 Nobi 内置翻译引擎，面向美术素材、设计、3D 和 AI prompt 工作流。\n\
-         源语言：{source_lang}\n目标语言：{target_lang}\n模式：{mode}\n要求：{mode_hint}\n\
-         {glossary}\n只输出结果正文，不要解释你如何工作。\n\n原文：\n{text}"
+        "You are Nobi's built-in general-purpose translation engine.\n\
+         Source language: {source_lang}\nTarget language: {target_lang}\nMode: {mode}\nRequirement: {mode_hint}\n\
+         {glossary}\nOutput only the result text. Do not explain your process.\n\nSource text:\n{text}"
     )
 }
 
@@ -294,27 +645,8 @@ fn glossary_hits(text: &str, terms: &[GlossaryTerm]) -> Vec<GlossaryHit> {
     hits
 }
 
-fn builtin_terms_as_glossary() -> Vec<GlossaryTerm> {
-    BUILTIN_TERMS
-        .iter()
-        .enumerate()
-        .map(|(i, t)| GlossaryTerm {
-            id: -((i as i64) + 1),
-            source: t.source.to_string(),
-            target: t.target.to_string(),
-            explanation: t.explanation.to_string(),
-            category: t.category.to_string(),
-            tags: Vec::new(),
-            created_at: 0,
-            updated_at: 0,
-            use_count: 0,
-        })
-        .collect()
-}
-
 fn merged_terms(app: &tauri::AppHandle) -> Result<Vec<GlossaryTerm>, String> {
     let mut terms = db_terms(app)?;
-    terms.extend(builtin_terms_as_glossary());
     terms.sort_by_key(|t| -(t.source.chars().count() as isize));
     Ok(terms)
 }
@@ -336,39 +668,144 @@ fn keywords_from(text: &str, hits: &[GlossaryHit]) -> Vec<String> {
     out
 }
 
-fn builtin_translate(
+fn offline_lookup(word: &str) -> Option<&'static str> {
+    OFFLINE_DICTIONARY
+        .iter()
+        .find(|entry| entry.source.eq_ignore_ascii_case(word))
+        .map(|entry| entry.target)
+}
+
+fn offline_translate_token(raw: &str) -> (String, bool) {
+    let start = raw
+        .char_indices()
+        .find(|(_, ch)| ch.is_ascii_alphanumeric())
+        .map(|(i, _)| i)
+        .unwrap_or(raw.len());
+    let end = raw
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| ch.is_ascii_alphanumeric())
+        .map(|(i, ch)| i + ch.len_utf8())
+        .unwrap_or(start);
+    if start >= end {
+        return (raw.to_string(), false);
+    }
+    let head = &raw[..start];
+    let core = &raw[start..end];
+    let tail = &raw[end..];
+    let key = core.to_ascii_lowercase();
+    if let Some(target) = offline_lookup(&key) {
+        return (format!("{head}{target}{tail}"), true);
+    }
+    if key.ends_with('s') {
+        let singular = key.trim_end_matches('s');
+        if let Some(target) = offline_lookup(singular) {
+            return (format!("{head}{target}{tail}"), true);
+        }
+    }
+    (raw.to_string(), false)
+}
+
+fn offline_translate(
     req: &TranslationRequest,
-    source_lang: &str,
+    _source_lang: &str,
     target_lang: &str,
-    mode: &str,
+    _mode: &str,
     hits: &[GlossaryHit],
 ) -> String {
-    if hits.is_empty() {
+    let text = req.text.trim();
+    if !target_lang.to_lowercase().starts_with("zh") {
         return format!(
-            "离线内置模式暂未找到可匹配的术语。\n\n原文：{}\n\n提示：启动本地 Ollama 或配置云端 API 后，可获得完整翻译；术语库仍会优先参与。",
-            req.text.trim()
+            "Offline translation currently supports basic English to Chinese only.\n\nSource: {text}"
         );
     }
-    let mut lines = Vec::new();
-    match mode {
-        "prompt" => lines.push("Prompt / 素材检索关键词参考：".to_string()),
-        "tags" => lines.push("可用标签参考：".to_string()),
-        "art_terms" => lines.push("美术术语解释：".to_string()),
-        _ => lines.push(format!(
-            "离线术语翻译参考（{} -> {}）：",
-            source_lang, target_lang
-        )),
-    }
-    for h in hits {
-        if mode == "tags" {
-            lines.push(format!("{}、{}", h.target, h.source));
-        } else {
-            lines.push(format!("{} = {}：{}", h.source, h.target, h.explanation));
+
+    let mut matched = 0usize;
+    let translated = text
+        .split_whitespace()
+        .map(|token| {
+            let (out, ok) = offline_translate_token(token);
+            if ok {
+                matched += 1;
+            }
+            out
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let mut lines = vec![translated];
+    if !hits.is_empty() {
+        lines.push(String::new());
+        lines.push("自定义词库命中：".to_string());
+        for h in hits {
+            lines.push(format!("{} = {}", h.source, h.target));
         }
     }
     lines.push(String::new());
-    lines.push("说明：这是无网络/无模型时的内置术语兜底，不会伪装成完整机器翻译。".to_string());
+    if matched == 0 && hits.is_empty() {
+        lines.push("[离线] 未命中通用词典，已保留原文。联网后会自动使用在线翻译。".to_string());
+    } else {
+        lines.push(
+            "[离线基础翻译] 这是本地词典结果，适合断网兜底；完整自然句建议使用在线翻译。"
+                .to_string(),
+        );
+    }
     lines.join("\n")
+}
+
+fn online_lang_code(lang: &str) -> String {
+    let lang = lang.trim();
+    if lang.is_empty() || lang.eq_ignore_ascii_case("auto") {
+        "auto".to_string()
+    } else if lang.eq_ignore_ascii_case("zh") || lang.eq_ignore_ascii_case("zh-cn") {
+        "zh-CN".to_string()
+    } else {
+        lang.to_string()
+    }
+}
+
+async fn online_translate(
+    req: &TranslationRequest,
+    source_lang: &str,
+    target_lang: &str,
+) -> Result<(String, String, Option<String>), String> {
+    let client = reqwest::Client::new();
+    let sl = online_lang_code(source_lang);
+    let tl = online_lang_code(target_lang);
+    let resp = client
+        .get("https://translate.googleapis.com/translate_a/single")
+        .timeout(std::time::Duration::from_secs(12))
+        .query(&[
+            ("client", "gtx"),
+            ("sl", sl.as_str()),
+            ("tl", tl.as_str()),
+            ("dt", "t"),
+            ("q", req.text.trim()),
+        ])
+        .send()
+        .await
+        .map_err(|e| format!("在线翻译请求失败：{e}"))?;
+    if !resp.status().is_success() {
+        let st = resp.status();
+        let t = resp.text().await.unwrap_or_default();
+        return Err(format!("在线翻译返回 {st}: {t}"));
+    }
+
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let mut out = String::new();
+    if let Some(parts) = v.get(0).and_then(|x| x.as_array()) {
+        for part in parts {
+            if let Some(s) = part.get(0).and_then(|x| x.as_str()) {
+                out.push_str(s);
+            }
+        }
+    }
+    let out = out.trim().to_string();
+    if out.is_empty() {
+        return Err("在线翻译返回空结果".to_string());
+    }
+    let detected = v.get(2).and_then(|x| x.as_str()).map(|x| x.to_string());
+    Ok((out, "online-google".to_string(), detected))
 }
 
 async fn provider_translate(
@@ -488,7 +925,7 @@ pub async fn translate_text(
         return Err("文本太长，请先缩短到 12000 字以内".to_string());
     }
 
-    let source_lang = clean_lang(req.source_lang.clone(), &detect_lang(text));
+    let mut source_lang = clean_lang(req.source_lang.clone(), &detect_lang(text));
     let target_lang = clean_lang(req.target_lang.clone(), "zh-CN");
     let mode = clean_mode(req.mode.clone());
     let terms = merged_terms(&app)?;
@@ -499,22 +936,44 @@ pub async fn translate_text(
         .unwrap_or_else(|| "auto".to_string())
         .to_lowercase();
 
-    let (target_text, provider, warning) = if provider_choice == "builtin" {
-        (
-            builtin_translate(&req, &source_lang, &target_lang, &mode, &hits),
-            "builtin".to_string(),
+    let (target_text, provider, warning) = match provider_choice.as_str() {
+        "offline" | "builtin" => (
+            offline_translate(&req, &source_lang, &target_lang, &mode, &hits),
+            "offline".to_string(),
             None,
-        )
-    } else {
-        match provider_translate(&app, &req, &source_lang, &target_lang, &mode, &hits).await {
-            Ok((text, provider)) => (text, provider, None),
-            Err(e) if provider_choice == "auto" => (
-                builtin_translate(&req, &source_lang, &target_lang, &mode, &hits),
-                "builtin-fallback".to_string(),
+        ),
+        "model" => {
+            match provider_translate(&app, &req, &source_lang, &target_lang, &mode, &hits).await {
+                Ok((text, provider)) => (text, provider, None),
+                Err(e) => return Err(e),
+            }
+        }
+        "online" => match online_translate(&req, &source_lang, &target_lang).await {
+            Ok((text, provider, detected)) => {
+                if source_lang == "auto" {
+                    if let Some(detected) = detected {
+                        source_lang = detected;
+                    }
+                }
+                (text, provider, None)
+            }
+            Err(e) => return Err(e),
+        },
+        _ => match online_translate(&req, &source_lang, &target_lang).await {
+            Ok((text, provider, detected)) => {
+                if source_lang == "auto" {
+                    if let Some(detected) = detected {
+                        source_lang = detected;
+                    }
+                }
+                (text, provider, None)
+            }
+            Err(e) => (
+                offline_translate(&req, &source_lang, &target_lang, &mode, &hits),
+                "offline-fallback".to_string(),
                 Some(e),
             ),
-            Err(e) => return Err(e),
-        }
+        },
     };
 
     let mut result = TranslationResult {
@@ -633,35 +1092,32 @@ mod tests {
 
     #[test]
     fn detects_basic_languages() {
-        assert_eq!(detect_lang("roughness map"), "en");
-        assert_eq!(detect_lang("粗糙度贴图"), "zh");
+        assert_eq!(detect_lang("hello world"), "en");
+        assert_eq!(detect_lang("中文翻译"), "zh");
     }
 
     #[test]
-    fn builtin_glossary_hits_art_terms() {
-        let terms = builtin_terms_as_glossary();
-        let hits = glossary_hits("roughness and normal map", &terms);
-        assert!(hits.iter().any(|h| h.target == "粗糙度"));
-        assert!(hits.iter().any(|h| h.target == "法线贴图"));
+    fn unsupported_mode_falls_back_to_normal() {
+        assert_eq!(clean_mode(Some("unsupported".to_string())), "normal");
+        assert_eq!(clean_mode(Some("normal".to_string())), "normal");
     }
 
     #[test]
-    fn builtin_translate_is_explicit_fallback() {
+    fn offline_translate_uses_general_dictionary() {
         let req = TranslationRequest {
-            text: "roughness".to_string(),
+            text: "hello world, testing improvement".to_string(),
             source_lang: None,
             target_lang: Some("zh-CN".to_string()),
-            mode: Some("art_terms".to_string()),
-            provider: Some("builtin".to_string()),
+            mode: Some("normal".to_string()),
+            provider: Some("offline".to_string()),
             source_app: None,
             source_url: None,
             asset_id: None,
             save_history: Some(false),
         };
-        let terms = builtin_terms_as_glossary();
-        let hits = glossary_hits(&req.text, &terms);
-        let out = builtin_translate(&req, "en", "zh-CN", "art_terms", &hits);
-        assert!(out.contains("粗糙度"));
-        assert!(out.contains("内置术语兜底"));
+        let out = offline_translate(&req, "en", "zh-CN", "normal", &[]);
+        assert!(out.contains("你好"));
+        assert!(out.contains("测试"));
+        assert!(out.contains("离线基础翻译"));
     }
 }

@@ -63,8 +63,8 @@ export interface ClipTarget {
   img: string;
 }
 
-export type TranslationMode = "normal" | "art_terms" | "prompt" | "tags";
-export type TranslationProvider = "auto" | "builtin" | "model";
+export type TranslationMode = "normal" | "prompt" | "tags";
+export type TranslationProvider = "auto" | "online" | "offline" | "model" | "builtin";
 
 export interface TranslationRequest {
   text: string;

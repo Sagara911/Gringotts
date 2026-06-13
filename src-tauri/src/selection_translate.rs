@@ -498,7 +498,7 @@ mod selection_translate_tests {
     #[test]
     fn detects_english_selection() {
         assert!(looks_like_english_text(
-            "roughness map and ambient occlusion are common material terms."
+            "This sentence should be detected as English text."
         ));
         assert!(looks_like_english_text("ambient_occlusion"));
         assert!(looks_like_english_text("UV"));
@@ -506,7 +506,7 @@ mod selection_translate_tests {
 
     #[test]
     fn ignores_non_english_selection() {
-        assert!(!looks_like_english_text("材质和粗糙度"));
+        assert!(!looks_like_english_text("这是一段中文"));
         assert!(!looks_like_english_text("12345 / 67890"));
         assert!(!looks_like_english_text("翻译 translate"));
     }

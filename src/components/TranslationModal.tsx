@@ -2,29 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   GlossaryTerm,
   TranslationHistoryItem,
-  TranslationMode,
   TranslationProvider,
   TranslationResult,
 } from "../types";
 import * as api from "../api";
 
-const MODES: Array<{ key: TranslationMode; label: string }> = [
-  { key: "normal", label: "普通翻译" },
-  { key: "art_terms", label: "美术术语" },
-  { key: "prompt", label: "Prompt" },
-  { key: "tags", label: "标签" },
-];
-
 const PROVIDERS: Array<{ key: TranslationProvider; label: string }> = [
-  { key: "auto", label: "自动" },
+  { key: "auto", label: "自动（在线优先）" },
+  { key: "online", label: "在线翻译" },
+  { key: "offline", label: "离线翻译" },
   { key: "model", label: "当前模型" },
-  { key: "builtin", label: "离线术语" },
 ];
 
 export default function TranslationModal({ onClose }: { onClose: () => void }) {
-  const [text, setText] = useState("roughness, albedo, normal map");
+  const [text, setText] = useState("Hello, I need to translate this sentence.");
   const [targetLang, setTargetLang] = useState("zh-CN");
-  const [mode, setMode] = useState<TranslationMode>("art_terms");
+  const mode = "normal";
   const [provider, setProvider] = useState<TranslationProvider>("auto");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TranslationResult | null>(null);
@@ -34,7 +27,7 @@ export default function TranslationModal({ onClose }: { onClose: () => void }) {
   const [termSource, setTermSource] = useState("");
   const [termTarget, setTermTarget] = useState("");
   const [termExplanation, setTermExplanation] = useState("");
-  const [termCategory, setTermCategory] = useState("美术");
+  const [termCategory, setTermCategory] = useState("通用");
 
   async function refresh() {
     const [gs, hs] = await Promise.all([
@@ -79,7 +72,7 @@ export default function TranslationModal({ onClose }: { onClose: () => void }) {
 
   async function addTerm() {
     if (!termSource.trim() || !termTarget.trim()) {
-      setMsg("术语原文和译文不能为空");
+      setMsg("原文和译文不能为空");
       return;
     }
     try {
@@ -93,10 +86,10 @@ export default function TranslationModal({ onClose }: { onClose: () => void }) {
       setTermSource("");
       setTermTarget("");
       setTermExplanation("");
-      setMsg("术语已保存");
+      setMsg("词条已保存");
       await refresh();
     } catch (e) {
-      setMsg(`保存术语失败：${e}`);
+      setMsg(`保存词条失败：${e}`);
     }
   }
 
@@ -121,24 +114,10 @@ export default function TranslationModal({ onClose }: { onClose: () => void }) {
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={7}
-              placeholder="粘贴英文网页、术语、prompt 或素材说明"
+              placeholder="粘贴要翻译的文本"
             />
 
             <div className="tr-row">
-              <div>
-                <label>模式</label>
-                <div className="tr-segments">
-                  {MODES.map((m) => (
-                    <button
-                      key={m.key}
-                      className={"tr-seg" + (mode === m.key ? " on" : "")}
-                      onClick={() => setMode(m.key)}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <div>
                 <label>Provider</label>
                 <select
@@ -216,19 +195,19 @@ export default function TranslationModal({ onClose }: { onClose: () => void }) {
           </section>
 
           <aside className="tr-side">
-            <h4>术语库</h4>
+            <h4>自定义词库</h4>
             <div className="tr-term-form">
               <input
                 className="cfg-input"
                 value={termSource}
                 onChange={(e) => setTermSource(e.target.value)}
-                placeholder="roughness"
+                placeholder="hello"
               />
               <input
                 className="cfg-input"
                 value={termTarget}
                 onChange={(e) => setTermTarget(e.target.value)}
-                placeholder="粗糙度"
+                placeholder="你好"
               />
               <input
                 className="cfg-input"
@@ -244,12 +223,12 @@ export default function TranslationModal({ onClose }: { onClose: () => void }) {
                 rows={2}
               />
               <button className="btn" onClick={addTerm}>
-                保存术语
+                保存词条
               </button>
             </div>
 
             <div className="tr-terms">
-              {previewTerms.length === 0 && <div className="dim">还没有自定义术语</div>}
+              {previewTerms.length === 0 && <div className="dim">还没有自定义词条</div>}
               {previewTerms.map((t) => (
                 <div className="tr-term" key={t.id}>
                   <div>
