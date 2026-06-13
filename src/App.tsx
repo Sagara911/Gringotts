@@ -8,6 +8,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { emitTo } from "@tauri-apps/api/event";
+import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
 import { getVersion } from "@tauri-apps/api/app";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { check as checkUpdate, type Update } from "@tauri-apps/plugin-updater";
@@ -20,7 +22,15 @@ import {
 } from "dockview";
 import "dockview/dist/styles/dockview.css";
 
-import type { AiCmd, Asset, Collection, Filter, Menu, SortKey } from "./types";
+import type {
+  AiCmd,
+  Asset,
+  Collection,
+  Filter,
+  Menu,
+  SelectionTranslatePayload,
+  SortKey,
+} from "./types";
 import { DOBBY_URL, REPO_URL, isAudio, isImage, isModel, isVideo, primaryBucket } from "./utils";
 import * as api from "./api";
 import { imageVector, textVector } from "./clip";
@@ -162,6 +172,68 @@ function App() {
       un.then((f) => f());
     };
   }, [reload, buildThumbs]);
+
+  const openSelectionTranslatePopover = useCallback(
+    async (payload: SelectionTranslatePayload) => {
+      const text = payload.text.trim();
+      if (!text) return;
+
+      const label = "selection-translate";
+      const saved = { ...payload, text };
+      try {
+        localStorage.setItem("nobi.selectionTranslate.payload", JSON.stringify(saved));
+      } catch {
+        /* ignore */
+      }
+
+      const send = async (win: WebviewWindow) => {
+        await win.setSize(new LogicalSize(360, 150)).catch(() => {});
+        await win.setPosition(new PhysicalPosition(payload.x + 12, payload.y + 12)).catch(() => {});
+        await win.show().catch(() => {});
+        await emitTo(label, "selection-translate-payload", saved).catch(() => {});
+      };
+
+      const existing = await WebviewWindow.getByLabel(label);
+      if (existing) {
+        await send(existing);
+        return;
+      }
+
+      const win = new WebviewWindow(label, {
+        url: "index.html#selection-translate",
+        title: "Nobi 翻译",
+        width: 360,
+        height: 150,
+        minWidth: 300,
+        minHeight: 118,
+        decorations: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        shadow: true,
+        focus: false,
+        focusable: true,
+      });
+
+      win.once("tauri://created", () => {
+        window.setTimeout(() => void send(win), 80);
+      });
+      win.once("tauri://error", (e) => {
+        setStatus(`划词翻译浮窗打开失败：${String(e.payload)}`);
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    const un = listen<SelectionTranslatePayload>("selection-translate-requested", (e) => {
+      void openSelectionTranslatePopover(e.payload);
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [openSelectionTranslatePopover]);
 
   // MCP 本地接口（mcp_api.rs）触发的事件：智能体加图上画板 / 库被外部修改
   const assetsRef = useRef<Asset[]>([]);

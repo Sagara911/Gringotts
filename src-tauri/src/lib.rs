@@ -18,6 +18,7 @@ mod db;
 mod library;
 mod mcp_api;
 mod search;
+mod selection_translate;
 mod settings;
 mod thumbs;
 mod translation;
@@ -702,6 +703,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             collect::start_collect_server(app.handle().clone());
+            selection_translate::start(app.handle().clone());
 
             // 看球窗偏好（透明度/缩放）跨重启记忆
             #[cfg(desktop)]

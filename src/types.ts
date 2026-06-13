@@ -130,6 +130,13 @@ export interface TranslationHistoryItem {
   createdAt: number;
 }
 
+export interface SelectionTranslatePayload {
+  text: string;
+  x: number;
+  y: number;
+  sourceApp?: string;
+}
+
 export interface MenuItem {
   label?: string;
   action?: () => void;
