@@ -45,6 +45,8 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 static LAST_RIGHT_CLICK_MS: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(windows)]
+const RIGHT_CLICK_DEBOUNCE_MS: u64 = 160;
+#[cfg(windows)]
 const CLIP_SENTINEL: &str = "__NOBI_SELECTION_TRANSLATE_SENTINEL__";
 
 pub fn start(app: tauri::AppHandle) {
@@ -59,7 +61,6 @@ pub fn start(app: tauri::AppHandle) {
 pub fn close_selection_translate_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("selection-translate") {
         let _ = w.hide();
-        w.close().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -120,7 +121,10 @@ fn handle_left_click(x: i32, y: i32) {
     let Some(app) = APP.get() else {
         return;
     };
-    if app.get_webview_window("selection-translate").is_none() {
+    let Some(w) = app.get_webview_window("selection-translate") else {
+        return;
+    };
+    if !w.is_visible().unwrap_or(false) {
         return;
     }
     let _ = app.emit_to(
@@ -133,7 +137,7 @@ fn handle_left_click(x: i32, y: i32) {
 #[cfg(windows)]
 fn handle_right_click(x: i32, y: i32, event_ms: u64) {
     let last = LAST_RIGHT_CLICK_MS.load(Ordering::Relaxed);
-    if event_ms.saturating_sub(last) < 260 {
+    if event_ms.saturating_sub(last) < RIGHT_CLICK_DEBOUNCE_MS {
         return;
     }
     LAST_RIGHT_CLICK_MS.store(event_ms, Ordering::Relaxed);
@@ -268,8 +272,7 @@ fn read_selected_text_from_clipboard_copy() -> Option<String> {
         }
 
         send_ctrl_c();
-        std::thread::sleep(std::time::Duration::from_millis(170));
-        let copied = read_clipboard_text();
+        let copied = wait_for_copied_clipboard_text();
 
         if let Some(old) = old_clipboard {
             let _ = OleSetClipboard(&old);
@@ -285,6 +288,24 @@ fn read_selected_text_from_clipboard_copy() -> Option<String> {
             return None;
         }
         Some(text)
+    }
+}
+
+#[cfg(windows)]
+fn wait_for_copied_clipboard_text() -> Option<String> {
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(text) = read_clipboard_text() {
+            let text = text.trim().to_string();
+            if !text.is_empty() && text != CLIP_SENTINEL {
+                return Some(text);
+            }
+        }
+
+        if start.elapsed() >= std::time::Duration::from_millis(150) {
+            return read_clipboard_text();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(16));
     }
 }
 

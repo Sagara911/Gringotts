@@ -50,6 +50,8 @@ import {
 import "./App.css";
 
 const DOCK_KEY = "nobi-dock-v1";
+const SELECTION_TRANSLATE_LABEL = "selection-translate";
+const SELECTION_TRANSLATE_STORAGE_KEY = "nobi.selectionTranslate.payload";
 
 function App() {
   // ===== 状态 =====
@@ -119,6 +121,56 @@ function App() {
     updateRef.current = update;
   }, [update]);
 
+  const createSelectionTranslateWindow = useCallback(() => {
+    const win = new WebviewWindow(SELECTION_TRANSLATE_LABEL, {
+      url: "index.html#selection-translate",
+      title: "Nobi 翻译",
+      width: SELECTION_TRANSLATE_CHIP_SIZE.width,
+      height: SELECTION_TRANSLATE_CHIP_SIZE.height,
+      minWidth: 96,
+      minHeight: 40,
+      decorations: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      shadow: false,
+      focus: false,
+      focusable: true,
+      visible: false,
+    });
+
+    win.once("tauri://error", (e) => {
+      setStatus(`划词翻译浮窗打开失败：${String(e.payload)}`);
+    });
+
+    return win;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (cancelled) return;
+        const existing = await WebviewWindow.getByLabel(SELECTION_TRANSLATE_LABEL).catch(
+          () => null,
+        );
+        if (cancelled || existing) return;
+        try {
+          localStorage.removeItem(SELECTION_TRANSLATE_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        createSelectionTranslateWindow();
+      })();
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [createSelectionTranslateWindow]);
+
   // ===== 数据加载 =====
   const reload = useCallback(async () => {
     try {
@@ -181,10 +233,9 @@ function App() {
       const text = payload.text.trim();
       if (!text) return;
 
-      const label = "selection-translate";
       const saved = { ...payload, text };
       try {
-        localStorage.setItem("nobi.selectionTranslate.payload", JSON.stringify(saved));
+        localStorage.setItem(SELECTION_TRANSLATE_STORAGE_KEY, JSON.stringify(saved));
       } catch {
         /* ignore */
       }
@@ -197,40 +248,23 @@ function App() {
           )
           .catch(() => {});
         await win.show().catch(() => {});
-        await emitTo(label, "selection-translate-payload", saved).catch(() => {});
+        await emitTo(SELECTION_TRANSLATE_LABEL, "selection-translate-payload", saved).catch(
+          () => {},
+        );
       };
 
-      const existing = await WebviewWindow.getByLabel(label);
+      const existing = await WebviewWindow.getByLabel(SELECTION_TRANSLATE_LABEL);
       if (existing) {
         await send(existing);
         return;
       }
 
-      const win = new WebviewWindow(label, {
-        url: "index.html#selection-translate",
-        title: "Nobi 翻译",
-        width: SELECTION_TRANSLATE_CHIP_SIZE.width,
-        height: SELECTION_TRANSLATE_CHIP_SIZE.height,
-        minWidth: 96,
-        minHeight: 40,
-        decorations: false,
-        transparent: true,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        resizable: false,
-        shadow: false,
-        focus: false,
-        focusable: true,
-      });
-
+      const win = createSelectionTranslateWindow();
       win.once("tauri://created", () => {
-        window.setTimeout(() => void send(win), 80);
-      });
-      win.once("tauri://error", (e) => {
-        setStatus(`划词翻译浮窗打开失败：${String(e.payload)}`);
+        window.setTimeout(() => void send(win), 20);
       });
     },
-    []
+    [createSelectionTranslateWindow]
   );
 
   useEffect(() => {
