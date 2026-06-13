@@ -72,6 +72,8 @@ body.selection-translate-window #root {
 .stw-card {
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 8px;
@@ -80,6 +82,7 @@ body.selection-translate-window #root {
 }
 
 .stw-head {
+  flex: 0 0 36px;
   height: 36px;
   display: flex;
   align-items: center;
@@ -125,6 +128,9 @@ body.selection-translate-window #root {
 }
 
 .stw-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
   padding: 11px 12px 12px;
 }
 
@@ -177,7 +183,10 @@ body.selection-translate-window #root {
 }
 
 .stw-result {
+  display: flex;
+  min-height: 0;
   min-width: 0;
+  flex-direction: column;
 }
 
 .stw-meta {
@@ -192,7 +201,7 @@ body.selection-translate-window #root {
 
 .stw-result p {
   margin: 0;
-  max-height: 132px;
+  max-height: 170px;
   overflow: auto;
   padding: 10px;
   border-radius: 7px;

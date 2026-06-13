@@ -3,7 +3,7 @@ import { monitorFromPoint, primaryMonitor } from "@tauri-apps/api/window";
 
 export const SELECTION_TRANSLATE_CHIP_SIZE = new LogicalSize(116, 40);
 export const SELECTION_TRANSLATE_BUSY_SIZE = new LogicalSize(400, 210);
-export const SELECTION_TRANSLATE_PANEL_SIZE = new LogicalSize(420, 310);
+export const SELECTION_TRANSLATE_PANEL_SIZE = new LogicalSize(460, 380);
 
 const POINTER_GAP = 12;
 const SCREEN_PADDING = 8;
