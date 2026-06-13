@@ -57,13 +57,13 @@ export async function selectionTranslatePosition(
     MENU_AVOID_HEIGHT,
   );
   const candidates = [
-    [pointerX - width - POINTER_GAP, pointerY - height - POINTER_GAP],
-    [pointerX + POINTER_GAP, pointerY - height - POINTER_GAP],
-    [pointerX - width - POINTER_GAP, pointerY + POINTER_GAP],
-    [pointerX - width / 2, pointerY - height - POINTER_GAP],
-    [pointerX - width / 2, pointerY + POINTER_GAP],
-    [pointerX + POINTER_GAP, pointerY + POINTER_GAP],
-  ].map(([x, y], index) => {
+    { x: pointerX + POINTER_GAP, y: pointerY - height - POINTER_GAP, bias: -24 },
+    { x: pointerX - width / 2, y: pointerY - height - POINTER_GAP, bias: -8 },
+    { x: pointerX - width - POINTER_GAP, y: pointerY - height - POINTER_GAP, bias: 0 },
+    { x: pointerX - width - POINTER_GAP, y: pointerY + POINTER_GAP, bias: 4 },
+    { x: pointerX - width / 2, y: pointerY + POINTER_GAP, bias: 8 },
+    { x: pointerX + POINTER_GAP, y: pointerY + POINTER_GAP, bias: 16 },
+  ].map(({ x, y, bias }, index) => {
     const cx = clamp(x, minX, maxX);
     const cy = clamp(y, minY, maxY);
     const candidate = rect(cx, cy, width, height);
@@ -72,7 +72,7 @@ export async function selectionTranslatePosition(
     return {
       x: cx,
       y: cy,
-      score: overlap * 20 + moved * 2 + index,
+      score: overlap * 20 + moved * 2 + index + bias,
     };
   });
   const best = candidates.reduce((a, b) => (b.score < a.score ? b : a));
