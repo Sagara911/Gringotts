@@ -131,6 +131,7 @@ function App() {
       minHeight: 40,
       decorations: false,
       transparent: true,
+      backgroundColor: "#00000000",
       alwaysOnTop: true,
       skipTaskbar: true,
       resizable: false,

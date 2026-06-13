@@ -127,11 +127,24 @@ fn handle_left_click(x: i32, y: i32) {
     if !w.is_visible().unwrap_or(false) {
         return;
     }
+    if is_own_process_point(x, y) || is_point_in_translate_window(&w, x, y) {
+        return;
+    }
     let _ = app.emit_to(
         "selection-translate",
         "selection-translate-left-clicked",
         SelectionTranslateClickPayload { x, y },
     );
+}
+
+#[cfg(windows)]
+fn is_point_in_translate_window(w: &tauri::WebviewWindow, x: i32, y: i32) -> bool {
+    let (Ok(pos), Ok(size)) = (w.outer_position(), w.outer_size()) else {
+        return false;
+    };
+    let right = pos.x.saturating_add(size.width as i32);
+    let bottom = pos.y.saturating_add(size.height as i32);
+    x >= pos.x && x <= right && y >= pos.y && y <= bottom
 }
 
 #[cfg(windows)]
