@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Nobi 采集",
+  "name": "Nobi 采集与翻译",
   "version": "0.1.0",
-  "description": "右键图片一键存入 Nobi 素材库（自动记录来源出处）",
-  "permissions": ["contextMenus", "notifications"],
+  "description": "右键图片存入 Nobi 素材库，选中文字可调用 Nobi 翻译。",
+  "permissions": ["contextMenus", "notifications", "scripting", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "icons": { "128": "icon.png" }
