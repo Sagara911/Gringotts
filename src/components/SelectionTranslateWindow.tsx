@@ -57,14 +57,20 @@ export default function SelectionTranslateWindow() {
   }, []);
 
   async function closeWindow() {
+    const current = win();
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
       /* ignore */
     }
-    await win()
-      .close()
-      .catch(() => win().hide());
+    await current.hide().catch(() => {});
+    await current.close().catch(() => {});
+  }
+
+  function startDrag(e: React.PointerEvent<HTMLDivElement>) {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button")) return;
+    void win().startDragging();
   }
 
   async function runTranslate() {
@@ -78,16 +84,16 @@ export default function SelectionTranslateWindow() {
         text,
         targetLang: "zh-CN",
         mode: "art_terms",
-        provider: "auto",
+        provider: "model",
         sourceApp: payload?.sourceApp || "system-selection",
         saveHistory: true,
       });
       setResult(r);
-      setMessage(r.warning ? "已使用离线术语兜底" : "");
+      setMessage(r.warning || "");
       await win().setSize(new LogicalSize(420, 330)).catch(() => {});
     } catch (e) {
-      setMessage(`翻译失败：${e}`);
-      await win().setSize(new LogicalSize(400, 230)).catch(() => {});
+      setMessage(`翻译服务不可用：${e}`);
+      await win().setSize(new LogicalSize(430, 250)).catch(() => {});
     } finally {
       setBusy(false);
     }
@@ -102,12 +108,17 @@ export default function SelectionTranslateWindow() {
   return (
     <main className="stw-shell">
       <section className="stw-card">
-        <div className="stw-head" onPointerDown={() => void win().startDragging()}>
+        <div className="stw-head" onPointerDown={startDrag}>
           <span>Nobi 翻译</span>
           <button
             className="stw-icon-btn"
-            onPointerDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void closeWindow();
+            }}
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               void closeWindow();
             }}
