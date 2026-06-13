@@ -29,27 +29,54 @@ function intersectionArea(a: Rect, b: Rect) {
   return Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
 }
 
-export async function selectionTranslatePosition(
-  pointerX: number,
-  pointerY: number,
-  size: LogicalSize,
-) {
+async function monitorBounds(x: number, y: number, size: LogicalSize) {
   const monitor =
-    (await monitorFromPoint(pointerX, pointerY).catch(() => null)) ??
+    (await monitorFromPoint(x, y).catch(() => null)) ??
     (await primaryMonitor().catch(() => null));
 
-  if (!monitor) {
-    return new PhysicalPosition(pointerX + POINTER_GAP, pointerY - size.height - POINTER_GAP);
-  }
+  if (!monitor) return null;
 
   const area = monitor.workArea;
   const scale = monitor.scaleFactor || 1;
   const width = Math.round(size.width * scale);
   const height = Math.round(size.height * scale);
-  const minX = area.position.x + SCREEN_PADDING;
-  const minY = area.position.y + SCREEN_PADDING;
-  const maxX = area.position.x + area.size.width - width - SCREEN_PADDING;
-  const maxY = area.position.y + area.size.height - height - SCREEN_PADDING;
+
+  return {
+    width,
+    height,
+    minX: area.position.x + SCREEN_PADDING,
+    minY: area.position.y + SCREEN_PADDING,
+    maxX: area.position.x + area.size.width - width - SCREEN_PADDING,
+    maxY: area.position.y + area.size.height - height - SCREEN_PADDING,
+  };
+}
+
+export async function selectionTranslateAnchoredPosition(
+  anchorX: number,
+  anchorY: number,
+  size: LogicalSize,
+) {
+  const bounds = await monitorBounds(anchorX, anchorY, size);
+  if (!bounds) {
+    return new PhysicalPosition(anchorX, anchorY);
+  }
+
+  return new PhysicalPosition(
+    Math.round(clamp(anchorX, bounds.minX, bounds.maxX)),
+    Math.round(clamp(anchorY, bounds.minY, bounds.maxY)),
+  );
+}
+
+export async function selectionTranslatePosition(
+  pointerX: number,
+  pointerY: number,
+  size: LogicalSize,
+) {
+  const bounds = await monitorBounds(pointerX, pointerY, size);
+  if (!bounds) {
+    return new PhysicalPosition(pointerX + POINTER_GAP, pointerY - size.height - POINTER_GAP);
+  }
+
   const avoid = rect(
     pointerX - SCREEN_PADDING,
     pointerY - SCREEN_PADDING,
@@ -57,16 +84,16 @@ export async function selectionTranslatePosition(
     MENU_AVOID_HEIGHT,
   );
   const candidates = [
-    { x: pointerX + POINTER_GAP, y: pointerY - height - POINTER_GAP, bias: -24 },
-    { x: pointerX - width / 2, y: pointerY - height - POINTER_GAP, bias: -8 },
-    { x: pointerX - width - POINTER_GAP, y: pointerY - height - POINTER_GAP, bias: 0 },
-    { x: pointerX - width - POINTER_GAP, y: pointerY + POINTER_GAP, bias: 4 },
-    { x: pointerX - width / 2, y: pointerY + POINTER_GAP, bias: 8 },
+    { x: pointerX + POINTER_GAP, y: pointerY - bounds.height - POINTER_GAP, bias: -24 },
+    { x: pointerX - bounds.width / 2, y: pointerY - bounds.height - POINTER_GAP, bias: -8 },
+    { x: pointerX - bounds.width - POINTER_GAP, y: pointerY - bounds.height - POINTER_GAP, bias: 0 },
+    { x: pointerX - bounds.width - POINTER_GAP, y: pointerY + POINTER_GAP, bias: 4 },
+    { x: pointerX - bounds.width / 2, y: pointerY + POINTER_GAP, bias: 8 },
     { x: pointerX + POINTER_GAP, y: pointerY + POINTER_GAP, bias: 16 },
   ].map(({ x, y, bias }, index) => {
-    const cx = clamp(x, minX, maxX);
-    const cy = clamp(y, minY, maxY);
-    const candidate = rect(cx, cy, width, height);
+    const cx = clamp(x, bounds.minX, bounds.maxX);
+    const cy = clamp(y, bounds.minY, bounds.maxY);
+    const candidate = rect(cx, cy, bounds.width, bounds.height);
     const moved = Math.abs(cx - x) + Math.abs(cy - y);
     const overlap = intersectionArea(candidate, avoid);
     return {

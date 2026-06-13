@@ -7,7 +7,7 @@ import {
   SELECTION_TRANSLATE_BUSY_SIZE,
   SELECTION_TRANSLATE_CHIP_SIZE,
   SELECTION_TRANSLATE_PANEL_SIZE,
-  selectionTranslatePosition,
+  selectionTranslateAnchoredPosition,
 } from "../selectionTranslatePosition";
 import "./SelectionTranslateWindow.css";
 
@@ -119,9 +119,11 @@ export default function SelectionTranslateWindow() {
   }
 
   async function placeWindow(size = SELECTION_TRANSLATE_PANEL_SIZE) {
-    if (!payload) return;
-    await win()
-      .setPosition(await selectionTranslatePosition(payload.x, payload.y, size))
+    const current = win();
+    const anchor = await current.outerPosition().catch(() => null);
+    if (!anchor) return;
+    await current
+      .setPosition(await selectionTranslateAnchoredPosition(anchor.x, anchor.y, size))
       .catch(() => {});
   }
 
