@@ -5,6 +5,11 @@ export const SELECTION_TRANSLATE_CHIP_SIZE = new LogicalSize(116, 40);
 export const SELECTION_TRANSLATE_BUSY_SIZE = new LogicalSize(400, 210);
 export const SELECTION_TRANSLATE_PANEL_SIZE = new LogicalSize(460, 380);
 
+const PANEL_MIN_WIDTH = 360;
+const PANEL_MAX_WIDTH = 460;
+const PANEL_MIN_HEIGHT = 180;
+const PANEL_MAX_HEIGHT = 380;
+
 const POINTER_GAP = 12;
 const SCREEN_PADDING = 8;
 const MENU_AVOID_WIDTH = 320;
@@ -13,6 +18,57 @@ const MENU_AVOID_HEIGHT = 280;
 function clamp(v: number, min: number, max: number) {
   if (max < min) return min;
   return Math.min(Math.max(v, min), max);
+}
+
+function normalizedLength(text: string) {
+  return text.replace(/\s+/g, " ").trim().length;
+}
+
+function estimatedLineCount(text: string, charsPerLine: number) {
+  const lines = text
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => normalizedLength(line))
+    .filter((len) => len > 0);
+
+  if (lines.length === 0) return 0;
+  return lines.reduce((sum, len) => sum + Math.max(1, Math.ceil(len / charsPerLine)), 0);
+}
+
+export function selectionTranslatePanelSize({
+  sourceText,
+  targetText = "",
+  message = "",
+  terms = 0,
+}: {
+  sourceText: string;
+  targetText?: string;
+  message?: string;
+  terms?: number;
+}) {
+  const longest = Math.max(normalizedLength(sourceText), normalizedLength(targetText));
+  const width = longest <= 28 ? PANEL_MIN_WIDTH : longest <= 80 ? 400 : PANEL_MAX_WIDTH;
+  const charsPerLine = Math.max(18, Math.floor((width - 44) / 7.4));
+  const previewLines = Math.min(2, estimatedLineCount(sourceText, charsPerLine));
+  const messageLines = Math.min(3, estimatedLineCount(message, charsPerLine));
+
+  let height = 36 + 23;
+  if (previewLines > 0) height += previewLines * 20 + 10;
+
+  if (targetText.trim()) {
+    const resultLines = Math.min(7, estimatedLineCount(targetText, charsPerLine));
+    height += 22 + Math.max(42, resultLines * 21 + 20) + 40;
+    if (terms > 0) height += 28;
+  } else {
+    height += 32;
+  }
+
+  if (messageLines > 0) height += 8 + messageLines * 18;
+
+  return new LogicalSize(
+    clamp(width, PANEL_MIN_WIDTH, PANEL_MAX_WIDTH),
+    clamp(Math.ceil(height), PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT),
+  );
 }
 
 type Rect = { x: number; y: number; width: number; height: number };

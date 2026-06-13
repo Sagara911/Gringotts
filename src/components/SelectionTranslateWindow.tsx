@@ -8,6 +8,7 @@ import {
   SELECTION_TRANSLATE_CHIP_SIZE,
   SELECTION_TRANSLATE_PANEL_SIZE,
   selectionTranslateAnchoredPosition,
+  selectionTranslatePanelSize,
 } from "../selectionTranslatePosition";
 import "./SelectionTranslateWindow.css";
 
@@ -55,7 +56,9 @@ export default function SelectionTranslateWindow() {
       setMessage("");
       setBusy(false);
       void win().setSize(
-        e.payload.openPanel ? SELECTION_TRANSLATE_PANEL_SIZE : SELECTION_TRANSLATE_CHIP_SIZE,
+        e.payload.openPanel
+          ? selectionTranslatePanelSize({ sourceText: e.payload.text })
+          : SELECTION_TRANSLATE_CHIP_SIZE,
       );
     });
     return () => {
@@ -171,17 +174,25 @@ export default function SelectionTranslateWindow() {
         saveHistory: true,
       });
       setResult(r);
-      setMessage(
+      const nextMessage =
         r.provider === "offline-fallback"
           ? "在线翻译不可用，已使用离线基础翻译。"
-          : r.warning || "",
-      );
-      await placeWindow(SELECTION_TRANSLATE_PANEL_SIZE);
-      await win().setSize(SELECTION_TRANSLATE_PANEL_SIZE).catch(() => {});
+          : r.warning || "";
+      setMessage(nextMessage);
+      const nextSize = selectionTranslatePanelSize({
+        sourceText: text,
+        targetText: r.targetText,
+        message: nextMessage,
+        terms: r.usedGlossary.length,
+      });
+      await placeWindow(nextSize);
+      await win().setSize(nextSize).catch(() => {});
     } catch (e) {
-      setMessage(`翻译服务不可用：${e}`);
-      await placeWindow(SELECTION_TRANSLATE_BUSY_SIZE);
-      await win().setSize(SELECTION_TRANSLATE_BUSY_SIZE).catch(() => {});
+      const nextMessage = `翻译服务不可用：${e}`;
+      setMessage(nextMessage);
+      const nextSize = selectionTranslatePanelSize({ sourceText: text, message: nextMessage });
+      await placeWindow(nextSize);
+      await win().setSize(nextSize).catch(() => {});
     } finally {
       setBusy(false);
     }
