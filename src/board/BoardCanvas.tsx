@@ -491,11 +491,21 @@ let boardClipboard: BoardShape[] = [];
 export default function BoardCanvas({
   onMount,
   onFindSimilar,
+  onOpenReference,
   onSaveAsCollection,
 }: {
   onMount: (editor: Editor) => void;
   /** 画板图片右键"找库里相似图"：有 assetId 走 clip_similar，无则用图自身像素算向量反查 */
   onFindSimilar?: (arg: { assetId?: number; src: string }) => void;
+  /** 画板图片右键"悬浮到桌面"：优先用 sourcePath，旧素材库图可用 assetId 回查。 */
+  onOpenReference?: (arg: {
+    assetId?: number;
+    sourcePath?: string;
+    src: string;
+    name: string;
+    width: number;
+    height: number;
+  }) => void;
   /** 把画板上来自库的图（assetId）存成一个合集回库 */
   onSaveAsCollection?: (assetIds: number[]) => void;
 }) {
@@ -1412,7 +1422,7 @@ export default function BoardCanvas({
       (async () => {
         const el = containerRef.current!;
         const center = toPage({ x: el.clientWidth / 2, y: el.clientHeight / 2 });
-        const place = (src: string, w0: number, h0: number, name: string) => {
+        const place = (src: string, w0: number, h0: number, name: string, sourcePath?: string) => {
           const MAX = 480;
           const sc = Math.min(1, MAX / Math.max(w0, h0, 1));
           const w = Math.max(40, w0 * sc);
@@ -1421,6 +1431,7 @@ export default function BoardCanvas({
             {
               id: newId(), type: "image", x: center.x - w / 2, y: center.y - h / 2,
               rotation: 0, opacity: 1, w, h, src, name,
+              sourcePath,
             },
           ]);
         };
@@ -1429,7 +1440,7 @@ export default function BoardCanvas({
           const buf = await file.arrayBuffer();
           // 走素材导入管线：落盘 图片\Nobi + 入素材库，画板引用文件路径
           const info = await importBlob(`粘贴_${Date.now()}.${ext}`, bufToB64(buf));
-          place(convertFileSrc(info.path), info.width, info.height, info.name);
+          place(convertFileSrc(info.path), info.width, info.height, info.name, info.path);
         } catch {
           // 浏览器环境/落盘失败：dataURL 直接上板兜底
           const url = await new Promise<string>((res) => {
@@ -2168,6 +2179,26 @@ export default function BoardCanvas({
                             }
                           },
                         ],
+                        ...(onOpenReference
+                          ? [[
+                              "悬浮到桌面（置顶参考）", "",
+                              (() => {
+                                const im = selShapes[0] as ImageShape;
+                                return !!im.sourcePath || im.assetId != null;
+                              })(),
+                              () => {
+                                const im = selShapes[0] as ImageShape;
+                                onOpenReference({
+                                  assetId: im.assetId,
+                                  sourcePath: im.sourcePath,
+                                  src: im.src,
+                                  name: im.name,
+                                  width: im.w,
+                                  height: im.h,
+                                });
+                              },
+                            ] as [string, string, boolean, () => void]]
+                          : []),
                         // 找库里相似图：有 assetId 走 clip_similar，无则用图像素算向量反查
                         ...(onFindSimilar
                           ? [[

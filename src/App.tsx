@@ -800,6 +800,30 @@ function App() {
     }
   }
 
+  function openBoardReference(arg: {
+    assetId?: number;
+    sourcePath?: string;
+    src: string;
+    name: string;
+    width: number;
+    height: number;
+  }) {
+    const asset = arg.assetId != null ? assets.find((a) => a.id === arg.assetId) : null;
+    const path = arg.sourcePath || asset?.path;
+    if (!path) {
+      setStatus("这张画板图片没有本地文件路径，暂时不能悬浮到桌面");
+      return;
+    }
+    openRefWindowFromPath({
+      path,
+      name: arg.name || asset?.name || "画板参考图",
+      width: arg.width || asset?.width,
+      height: arg.height || asset?.height,
+      labelHint: arg.assetId != null ? `board-${arg.assetId}` : "board",
+    });
+    setStatus("已打开桌面悬浮参考图");
+  }
+
   // 导出联系表 PDF：一组素材排成带文件名的缩略图网格图集，发给客户/同事
   async function exportContactSheet(list: Asset[], title: string) {
     if (!list.length) {
@@ -1117,12 +1141,18 @@ function App() {
   const selected = assets.find((a) => a.id === selectedId) ?? null;
 
   // 悬浮参考浮窗：把一张图"拉到桌面"——独立的无边框/透明/置顶小窗，浮在绘图软件上方
-  function openRefWindow(a: Asset) {
-    const ratio = a.width && a.height ? a.height / a.width : 0.72;
+  function openRefWindowFromPath(ref: {
+    path: string;
+    name: string;
+    width?: number;
+    height?: number;
+    labelHint?: string | number;
+  }) {
+    const ratio = ref.width && ref.height ? ref.height / ref.width : 0.72;
     const w = 360;
     const h = Math.round(Math.min(1200, Math.max(140, w * ratio))); // 按图比例，顶栏是叠加层不占高
-    const params = new URLSearchParams({ p: a.path, n: a.name });
-    const label = `ref-${a.id}-${refSeq.current++}`;
+    const params = new URLSearchParams({ p: ref.path, n: ref.name });
+    const label = `ref-${ref.labelHint ?? "board"}-${refSeq.current++}`;
     const win = new WebviewWindow(label, {
       url: `index.html#ref?${params.toString()}`,
       width: w,
@@ -1133,9 +1163,19 @@ function App() {
       skipTaskbar: true,
       resizable: true,
       shadow: false,
-      title: a.name,
+      title: ref.name,
     });
     win.once("tauri://error", (e) => setStatus(`悬浮窗打开失败：${JSON.stringify(e.payload)}`));
+  }
+
+  function openRefWindow(a: Asset) {
+    openRefWindowFromPath({
+      path: a.path,
+      name: a.name,
+      width: a.width,
+      height: a.height,
+      labelHint: a.id,
+    });
   }
 
   // 看图/练习浮层：多选时拿选中的当播放列表（练 gesture），否则用当前过滤列表。
@@ -1283,6 +1323,7 @@ function App() {
     openCmdMgr: () => setShowCmdMgr(true),
     onBoardMount,
     findSimilarFromBoard,
+    openBoardReference,
     reverseSearchByFile,
     collections,
     openCollection,

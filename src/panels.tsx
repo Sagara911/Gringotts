@@ -62,6 +62,14 @@ export interface DockState {
   openCmdMgr: () => void;
   onBoardMount: (ed: BoardEditor) => void;
   findSimilarFromBoard: (arg: { assetId?: number; src: string }) => void;
+  openBoardReference: (arg: {
+    assetId?: number;
+    sourcePath?: string;
+    src: string;
+    name: string;
+    width: number;
+    height: number;
+  }) => void;
   reverseSearchByFile: (file: File) => void;
   collections: Collection[];
   openCollection: (id: number) => void;
@@ -573,6 +581,7 @@ function BoardPanel(_p: IDockviewPanelProps) {
     <BoardCanvas
       onMount={d.onBoardMount}
       onFindSimilar={d.findSimilarFromBoard}
+      onOpenReference={d.openBoardReference}
       onSaveAsCollection={d.saveBoardAsCollection}
     />
   );

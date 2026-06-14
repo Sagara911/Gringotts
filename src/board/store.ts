@@ -46,6 +46,8 @@ export interface ImageShape extends ShapeBase {
   h: number;
   src: string;
   name: string;
+  /** 原始本地文件路径。用于从画板图片直接打开桌面悬浮参考窗；旧数据/临时 dataURL 可能没有。 */
+  sourcePath?: string;
   /** 来源素材库的 asset id（从库拖上画板时记下，供"找库里相似图"回查；旧数据/外部拖入无） */
   assetId?: number;
   /** 缩略图地址（LOD：缩小/远观时加载它省内存，放大看细节才换 src 原图） */
@@ -668,6 +670,7 @@ export class Editor {
       created.push({
         id: newId(), type: "image", x, y, rotation: 0, opacity: 1,
         w, h, src: imageSrc(img.path), name: img.name,
+        sourcePath: img.path,
         thumbSrc: img.thumb ? imageSrc(img.thumb) : undefined,
         assetId: img.id,
       });
